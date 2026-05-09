@@ -6,11 +6,17 @@ on:
     paths:
       - 'mcpb/**'
       - 'bin/share-file'
+      - 'lib/**'
+      - 'test/**'
+      - 'index.html'
       - '.github/workflows/release.yml'
   pull_request:
     paths:
       - 'mcpb/**'
       - 'bin/share-file'
+      - 'lib/**'
+      - 'test/**'
+      - 'index.html'
       - '.github/workflows/release.yml'
   workflow_dispatch:
 
@@ -18,7 +24,20 @@ permissions:
   contents: write
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Cross-runtime crypto tests
+        run: node test/format.test.mjs
+
   build:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

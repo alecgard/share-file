@@ -182,6 +182,7 @@ parse_target() {
   parsed_id="${parsed_id%%&*}"
 }
 
+main() {
 desc="Shared file"
 public=false
 encrypt=false
@@ -512,4 +513,10 @@ else
     printf '%s' "$rendered_url" | xclip -selection clipboard \
       && echo "(copied to clipboard)" >&2
   fi
+fi
+}
+
+# Run main only when invoked directly (not when sourced by tests).
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  main "$@"
 fi
