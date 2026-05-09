@@ -97,6 +97,21 @@ $ share-file --json /path/to/chart.png
 share-file --public --desc "Q3 results" dashboard.html
 ```
 
+## Private shares
+
+Pass `--encrypt` to encrypt content client-side before upload. The decryption key is appended to the rendered URL as a fragment (`#k=...`), which browsers never send to any server — so GitHub stores only ciphertext and the public viewer never sees the key.
+
+```bash
+$ share-file --encrypt dashboard.html
+Source:   https://gist.github.com/<you>/abc123
+Rendered: https://alecgard.github.io/share-file/?abc123#k=Woa-2A8tTA-P3KfHS6ohUA
+```
+
+- AES-128-CBC, authenticated with HMAC-SHA256. Filename and MIME type are also inside the encrypted blob.
+- The full URL is the secret. Anyone with it gets in; lose it and the content is unrecoverable.
+- `--update` re-encrypts with the same key (URL stays stable). Keys are cached at `~/.config/share-file/keys/<gist_id>` (chmod 600). Updates from a different machine require copying that key file over.
+- Not compatible with `--public`; `--desc` is ignored (gist description is server-visible).
+
 ## Supported file types
 
 Renders inline in the viewer:
@@ -151,8 +166,8 @@ echo "https://my-team.github.io/share-file/" > ~/.config/share-file/viewer
 
 ## Limits and caveats
 
-- **Unguessable, not authenticated.** Anyone with the gist ID can view.
+- **Unguessable, not authenticated.** Anyone with the gist ID can view. Use `--encrypt` to keep content opaque to GitHub and anyone who finds the gist ID alone.
 - **Rate limit.** Unauthenticated GitHub API allows 60 requests/hour per
   viewer IP. Self-hosting gives you your own rate-limit bucket.
 - **Single file per share.** Multi-file artifacts: inline assets or use a CDN.
-- **Don't share sensitive content.** Gist URLs are unguessable but not access-controlled.
+- **Sensitive content.** Without `--encrypt`, gists are unguessable but readable by GitHub. With `--encrypt`, the URL itself is the secret — share it through a channel you trust.

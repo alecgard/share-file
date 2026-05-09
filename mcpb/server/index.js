@@ -61,10 +61,16 @@ function commonFlags(args) {
   const flags = [];
   if (args.description) flags.push("--desc", args.description);
   if (args.public) flags.push("--public");
+  if (args.encrypt) flags.push("--encrypt");
   if (args.update_id) flags.push("--update", args.update_id);
   if (args.mime_override) flags.push("--mime", args.mime_override);
   return flags;
 }
+
+const ENCRYPT_DESC =
+  "Encrypt content client-side; the decryption key is appended to the rendered_url " +
+  "as a fragment (#k=...) and never sent to any server. Use for sensitive content. " +
+  "The full URL is the secret — anyone with it can decrypt. Not compatible with public.";
 
 const server = new McpServer({ name: "share-file", version: "1.0.0" });
 
@@ -92,6 +98,7 @@ server.registerTool(
         .boolean()
         .optional()
         .describe("Create a public (listed) gist instead of secret. Default false."),
+      encrypt: z.boolean().optional().describe(ENCRYPT_DESC),
       mime_override: z
         .string()
         .optional()
@@ -131,6 +138,7 @@ server.registerTool(
         .boolean()
         .optional()
         .describe("Create a public (listed) gist instead of secret."),
+      encrypt: z.boolean().optional().describe(ENCRYPT_DESC),
       mime_override: z
         .string()
         .optional()

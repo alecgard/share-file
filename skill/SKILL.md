@@ -56,6 +56,16 @@ If `file(1)` mis-detects (e.g. an extensionless JSON file):
 share-file --json --mime application/json --filename data.json data
 ```
 
+## Encrypted shares
+
+Pass `--encrypt` when the user asks for a private share, or when the content is sensitive enough that "unguessable URL" isn't enough:
+
+```bash
+share-file --json --encrypt /path/to/file.html
+```
+
+Returns the same JSON shape with `"encrypted": true` and `rendered_url` containing the decryption key as a URL fragment (`#k=...`). The full URL is the secret — anyone with it can decrypt; lose it and content is unrecoverable. Re-shares of `--update` work as normal (key is cached locally so the URL stays stable). Not compatible with `--public`; `--desc` is ignored under `--encrypt`.
+
 ## After publishing
 
 Report the `rendered_url` to the user as the share link. Mention `source_url`
@@ -63,7 +73,6 @@ only if relevant (they want to edit the gist directly).
 
 ## Don't use for
 
-- Content requiring authenticated access — gist URLs are unguessable but not access-controlled
-- Files >900KB (binary files are base64-encoded, so the raw size budget is ~675KB)
-- Content the user has flagged as sensitive
+- Files >900KB (binary files are base64-encoded, so the raw size budget is ~675KB; encryption adds ~33% on top)
 - Multi-file artifacts (one file per gist; inline assets or use a CDN for HTML)
+- Content requiring authenticated access — even with `--encrypt`, anyone with the URL gets in

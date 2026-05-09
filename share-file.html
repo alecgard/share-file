@@ -188,6 +188,7 @@
     <span class="pill">Single bash script</span>
     <span class="pill">Terminal or agent</span>
     <span class="pill">Updates reuse the same URL</span>
+    <span class="pill">Optional client-side encryption</span>
   </div>
 </header>
 
@@ -279,6 +280,13 @@
 
   <h3>Public gist instead of secret</h3>
 <pre><code>share-file --public --desc <span class="string">"Q3 results"</span> dashboard.html</code></pre>
+
+  <h3>Private (encrypted) share</h3>
+  <p class="muted">AES-128 client-side; the decryption key rides in the URL fragment, so GitHub never sees it.</p>
+<pre><code><span class="prompt">$</span> share-file --encrypt dashboard.html
+<span class="comment">Source:   https://gist.github.com/you/abc123</span>
+<span class="comment">Rendered: https://alecgard.github.io/share-file/?abc123#k=Woa-2A8tTA-P3KfHS6ohUA</span></code></pre>
+  <p class="muted">The full URL is the secret &mdash; share it through a channel you trust. Updates re-encrypt with the same key (URL stays stable).</p>
 </section>
 
 <hr class="sep">
@@ -333,13 +341,14 @@ cd share-file
     <h2>Limits and caveats</h2>
   </div>
   <div class="callout">
-    Gist URLs are unguessable but not access-controlled. Don't share sensitive content.
+    Plain shares are unguessable but readable by GitHub. For sensitive content, use <code>--encrypt</code> &mdash; the key stays out of every server log.
   </div>
   <ul>
-    <li><strong>Unguessable, not authenticated.</strong> Anyone with the gist ID can view.</li>
+    <li><strong>Unguessable, not authenticated.</strong> Anyone with the gist ID can view. Use <code>--encrypt</code> for content GitHub shouldn't be able to read.</li>
     <li><strong>Rate limit.</strong> Unauthenticated GitHub API allows 60 req/hr per viewer IP.
       Self-hosting gives you your own bucket.</li>
     <li><strong>Single file per share.</strong> Multi-file artifacts: inline assets or use a CDN.</li>
+    <li><strong>Encrypted shares are unrecoverable if lost.</strong> The key only exists in the URL and on the creator's machine.</li>
   </ul>
 </section>
 

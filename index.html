@@ -47,11 +47,55 @@ function showError(msg) {
   document.querySelector('.err').textContent = msg;
 }
 
-function b64ToBlob(b64, mime) {
+function b64ToBytes(b64) {
   const bin = atob(b64);
   const arr = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-  return new Blob([arr], { type: mime });
+  return arr;
+}
+
+function b64ToBlob(b64, mime) {
+  return new Blob([b64ToBytes(b64)], { type: mime });
+}
+
+function b64urlToBytes(s) {
+  const pad = (4 - s.length % 4) % 4;
+  return b64ToBytes((s + '='.repeat(pad)).replace(/-/g, '+').replace(/_/g, '/'));
+}
+
+function concatBytes(arrays) {
+  const total = arrays.reduce((n, a) => n + a.length, 0);
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const a of arrays) { out.set(a, off); off += a.length; }
+  return out;
+}
+
+async function sha256(bytes) {
+  return new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
+}
+
+// Decrypt payload produced by share-file --encrypt.
+// Format: base64( IV(16) || ciphertext || HMAC-SHA256(32) )
+// Keys derived from 16-byte master: enc = first16(SHA256(0x01||M)), mac = SHA256(0x02||M).
+async function decryptPayload(masterKeyB64url, payloadB64) {
+  const master = b64urlToBytes(masterKeyB64url);
+  if (master.length !== 16) throw new Error('Invalid key length');
+  const blob = b64ToBytes(payloadB64);
+  if (blob.length < 16 + 16 + 32) throw new Error('Encrypted payload too short');
+  const iv = blob.subarray(0, 16);
+  const mac = blob.subarray(blob.length - 32);
+  const ct = blob.subarray(16, blob.length - 32);
+  const encKeyBytes = (await sha256(concatBytes([new Uint8Array([0x01]), master]))).subarray(0, 16);
+  const macKeyBytes = await sha256(concatBytes([new Uint8Array([0x02]), master]));
+  const macKey = await crypto.subtle.importKey(
+    'raw', macKeyBytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']);
+  const ok = await crypto.subtle.verify('HMAC', macKey, mac, concatBytes([iv, ct]));
+  if (!ok) throw new Error('Authentication failed (wrong key or tampered data)');
+  const encKey = await crypto.subtle.importKey(
+    'raw', encKeyBytes, { name: 'AES-CBC' }, false, ['decrypt']);
+  const pt = await crypto.subtle.decrypt({ name: 'AES-CBC', iv }, encKey, ct);
+  return new TextDecoder().decode(pt);
 }
 
 function isTextMime(mime) {
@@ -227,40 +271,72 @@ async function main() {
     return;
   }
 
-  let filename, mime, encoding;
+  let filename, mime, encoding, content;
+  let meta = null;
   const metaFile = gist.files['_meta.json'];
   if (metaFile) {
     try {
-      const meta = JSON.parse(await fetchContent(metaFile));
-      filename = meta.filename;
-      mime = meta.mime_type;
-      encoding = meta.encoding;
+      meta = JSON.parse(await fetchContent(metaFile));
     } catch (e) {
       showError('Invalid _meta.json: ' + e.message);
       return;
     }
+  }
+
+  if (meta && meta.encrypted) {
+    const key = new URLSearchParams(location.hash.slice(1)).get('k');
+    if (!key) {
+      showError('This share is encrypted. The decryption key (#k=...) is missing from the URL.');
+      return;
+    }
+    const payloadFile = gist.files['payload.b64'];
+    if (!payloadFile) {
+      showError('Encrypted gist is missing payload.b64');
+      return;
+    }
+    let payloadB64;
+    try {
+      payloadB64 = (await fetchContent(payloadFile)).trim();
+    } catch (e) {
+      showError('Failed to load encrypted payload: ' + e.message);
+      return;
+    }
+    let inner;
+    try {
+      inner = JSON.parse(await decryptPayload(key, payloadB64));
+    } catch (e) {
+      showError('Decryption failed: ' + e.message);
+      return;
+    }
+    filename = inner.filename;
+    mime = inner.mime_type;
+    encoding = inner.encoding;
+    content = inner.content;
   } else {
-    const fallback = gist.files['index.html'] ||
-                     Object.values(gist.files).find(f => f.filename.endsWith('.html')) ||
-                     Object.values(gist.files)[0];
-    if (!fallback) { showError('No file found in gist'); return; }
-    filename = fallback.filename;
-    mime = fallback.type || 'text/plain';
-    encoding = 'raw';
-  }
-
-  const file = gist.files[filename];
-  if (!file) {
-    showError('File "' + filename + '" not found in gist');
-    return;
-  }
-
-  let content;
-  try {
-    content = await fetchContent(file);
-  } catch (e) {
-    showError('Failed to load file content: ' + e.message);
-    return;
+    if (meta) {
+      filename = meta.filename;
+      mime = meta.mime_type;
+      encoding = meta.encoding;
+    } else {
+      const fallback = gist.files['index.html'] ||
+                       Object.values(gist.files).find(f => f.filename.endsWith('.html')) ||
+                       Object.values(gist.files)[0];
+      if (!fallback) { showError('No file found in gist'); return; }
+      filename = fallback.filename;
+      mime = fallback.type || 'text/plain';
+      encoding = 'raw';
+    }
+    const file = gist.files[filename];
+    if (!file) {
+      showError('File "' + filename + '" not found in gist');
+      return;
+    }
+    try {
+      content = await fetchContent(file);
+    } catch (e) {
+      showError('Failed to load file content: ' + e.message);
+      return;
+    }
   }
 
   document.title = filename;

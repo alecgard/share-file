@@ -10,6 +10,7 @@ if [[ -z "$VIEWER_BASE" ]] && [[ -f "$HOME/.config/share-file/viewer" ]]; then
 fi
 VIEWER_BASE="${VIEWER_BASE:-https://alecgard.github.io/share-file/}"
 SIZE_LIMIT=900000  # ~900KB; gist API gets unreliable above 1MB
+KEY_CACHE_DIR="$HOME/.config/share-file/keys"
 
 usage() {
   cat <<EOF >&2
@@ -23,6 +24,7 @@ Usage:
 Flags:
   --desc <text>       Gist description (default: "Shared file")
   --public            Create a public (listed) gist instead of secret
+  --encrypt           Encrypt content client-side; key goes in URL fragment
   --update <id>       Update an existing gist instead of creating a new one
   --stdin             Read content from stdin (requires --filename)
   --filename <name>   Filename to use (overrides basename / required with --stdin)
@@ -34,13 +36,76 @@ Renderable in the viewer: HTML, images (PNG/JPG/GIF/SVG/WebP), PDF,
 plain text / source / JSON / XML / Markdown, audio, video. Other types
 produce a download link. Binary files are base64-encoded into the gist.
 
-Requires: gh (https://cli.github.com), jq, file. Authenticated via 'gh auth login'.
+With --encrypt, content is AES-128-CBC encrypted in the browser before
+upload (HMAC-SHA256 authenticated). The decryption key is appended to
+the rendered URL as a fragment (#k=...) and never sent to any server.
+Lose the URL = lose the content; there is no recovery.
+
+Requires: gh (https://cli.github.com), jq, file, openssl, xxd. Authenticated via 'gh auth login'.
 EOF
   exit "${1:-2}"
 }
 
+# Track temp files/dirs for cleanup on exit.
+TMP_PATHS=()
+cleanup_tmp() {
+  (( ${#TMP_PATHS[@]} == 0 )) && return
+  rm -rf "${TMP_PATHS[@]}"
+}
+trap cleanup_tmp EXIT
+
+reg_tmp() {
+  TMP_PATHS+=("$1")
+  printf '%s' "$1"
+}
+
+# Decode unpadded base64url ($1) to binary file ($2).
+b64url_decode_to() {
+  local s="$1" out="$2" pad
+  pad=$(( (4 - ${#s} % 4) % 4 ))
+  while (( pad-- > 0 )); do s="${s}="; done
+  printf '%s' "$s" | tr '_-' '/+' | openssl base64 -d -A > "$out"
+}
+
+# Encrypt stdin with AES-128-CBC + HMAC-SHA256.
+# $1 (optional): existing base64url master key (for re-encrypting on update).
+# Outputs to stdout: <master_key_b64url><newline><payload_b64>
+# Payload format: base64( IV(16) || ciphertext || HMAC-SHA256(32) ).
+# Keys derived from master: enc = first16(SHA256(0x01||M)), mac = SHA256(0x02||M).
+encrypt_payload() {
+  local existing_key="${1:-}"
+  local d
+  d=$(reg_tmp "$(mktemp -d)")
+  cat > "$d/plain.bin"
+  if [[ -n "$existing_key" ]]; then
+    b64url_decode_to "$existing_key" "$d/master.bin"
+    [[ $(wc -c < "$d/master.bin") -eq 16 ]] || {
+      echo "error: cached key for this gist is malformed (expected 16 bytes)" >&2
+      return 1
+    }
+  else
+    openssl rand 16 > "$d/master.bin"
+  fi
+  openssl rand 16 > "$d/iv.bin"
+  local enc_key_hex mac_key_hex iv_hex
+  enc_key_hex=$( { printf '\x01'; cat "$d/master.bin"; } | \
+    openssl dgst -sha256 -binary | head -c 16 | xxd -p -c 256)
+  mac_key_hex=$( { printf '\x02'; cat "$d/master.bin"; } | \
+    openssl dgst -sha256 -binary | xxd -p -c 256)
+  iv_hex=$(xxd -p -c 256 < "$d/iv.bin")
+  openssl enc -aes-128-cbc -K "$enc_key_hex" -iv "$iv_hex" \
+    -in "$d/plain.bin" -out "$d/ct.bin"
+  cat "$d/iv.bin" "$d/ct.bin" | \
+    openssl dgst -sha256 -mac HMAC -macopt "hexkey:$mac_key_hex" -binary > "$d/mac.bin"
+  local payload_b64 master_b64url
+  payload_b64=$(cat "$d/iv.bin" "$d/ct.bin" "$d/mac.bin" | openssl base64 -A)
+  master_b64url=$(openssl base64 -A < "$d/master.bin" | tr -d '=' | tr '+/' '-_')
+  printf '%s\n%s' "$master_b64url" "$payload_b64"
+}
+
 desc="Shared file"
 public=false
+encrypt=false
 update_id=""
 use_stdin=false
 output_json=false
@@ -52,6 +117,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --desc)     desc="$2"; shift 2 ;;
     --public)   public=true; shift ;;
+    --encrypt)  encrypt=true; shift ;;
     --update)   update_id="$2"; shift 2 ;;
     --stdin)    use_stdin=true; shift ;;
     --filename) filename_override="$2"; shift 2 ;;
@@ -63,18 +129,25 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+if $encrypt && $public; then
+  echo "error: --encrypt and --public are incompatible (encrypted public gists are gibberish)" >&2
+  exit 1
+fi
+
 command -v gh   >/dev/null || { echo "error: gh not installed (https://cli.github.com)" >&2; exit 1; }
 command -v jq   >/dev/null || { echo "error: jq not installed" >&2; exit 1; }
 command -v file >/dev/null || { echo "error: file(1) not installed" >&2; exit 1; }
 command -v base64 >/dev/null || { echo "error: base64 not installed" >&2; exit 1; }
+if $encrypt; then
+  command -v openssl >/dev/null || { echo "error: openssl not installed (required for --encrypt)" >&2; exit 1; }
+  command -v xxd     >/dev/null || { echo "error: xxd not installed (required for --encrypt)" >&2; exit 1; }
+fi
 gh auth status >/dev/null 2>&1 || { echo "error: not logged in. run: gh auth login" >&2; exit 1; }
 
 if $use_stdin; then
   [[ -n "$filename_override" ]] || { echo "error: --stdin requires --filename" >&2; exit 1; }
-  tmpfile=$(mktemp)
-  trap 'rm -f "$tmpfile"' EXIT
-  cat > "$tmpfile"
-  src_path="$tmpfile"
+  src_path=$(reg_tmp "$(mktemp)")
+  cat > "$src_path"
   filename="$filename_override"
 else
   [[ -n "$file" ]] || usage
@@ -106,19 +179,54 @@ case "$mime_type" in
     ;;
 esac
 
+master_key_b64url=""
+if $encrypt; then
+  # For encrypted updates, reuse the original key so the URL stays stable.
+  existing_key=""
+  if [[ -n "$update_id" ]]; then
+    if [[ -f "$KEY_CACHE_DIR/$update_id" ]]; then
+      existing_key=$(cat "$KEY_CACHE_DIR/$update_id")
+    else
+      echo "error: no cached key for gist $update_id at $KEY_CACHE_DIR/$update_id" >&2
+      echo "  share-file only re-encrypts gists whose key it has cached locally." >&2
+      echo "  copy the key file from the machine that created the gist, or create a new share." >&2
+      exit 1
+    fi
+  fi
+
+  inner_json=$(jq -n --arg fn "$filename" --arg mt "$mime_type" \
+    --arg enc "$encoding" --arg c "$content" \
+    '{filename: $fn, mime_type: $mt, encoding: $enc, content: $c}')
+
+  encrypt_out=$(printf '%s' "$inner_json" | encrypt_payload "$existing_key")
+  master_key_b64url="${encrypt_out%%$'\n'*}"
+  payload_b64="${encrypt_out#*$'\n'}"
+
+  filename="payload.b64"
+  content="$payload_b64"
+  encoding="encrypted"
+  if [[ "$desc" != "Shared file" ]]; then
+    echo "warning: --desc is ignored with --encrypt (gist description is server-visible)" >&2
+  fi
+  desc="encrypted"
+  meta_json=$(jq -n '{encrypted: true, version: 1, alg: "AES-128-CBC+HMAC-SHA256"}')
+else
+  meta_json=$(jq -n --arg fn "$filename" --arg mt "$mime_type" --arg enc "$encoding" \
+    '{filename: $fn, mime_type: $mt, encoding: $enc}')
+fi
+
 size=${#content}
 if (( size > SIZE_LIMIT )); then
   echo "error: payload is ${size} bytes (>${SIZE_LIMIT}), gist may reject or truncate" >&2
-  if [[ "$encoding" == "base64" ]]; then
+  if $encrypt; then
+    echo "  encryption adds ~33% base64 overhead on top of the original encoding" >&2
+  elif [[ "$encoding" == "base64" ]]; then
     echo "  binary files are base64-encoded (~33% overhead); try a smaller file" >&2
   else
     echo "  check for inline base64 images or embedded datasets" >&2
   fi
   exit 1
 fi
-
-meta_json=$(jq -n --arg fn "$filename" --arg mt "$mime_type" --arg enc "$encoding" \
-  '{filename: $fn, mime_type: $mt, encoding: $enc}')
 
 if [[ -n "$update_id" ]]; then
   body=$(jq -n --arg fn "$filename" --arg c "$content" --arg meta "$meta_json" \
@@ -136,14 +244,25 @@ else
   gist_id=$(jq -r '.id' <<<"$response")
 fi
 
+if $encrypt; then
+  mkdir -p "$KEY_CACHE_DIR"
+  chmod 700 "$KEY_CACHE_DIR" 2>/dev/null || true
+  printf '%s' "$master_key_b64url" > "$KEY_CACHE_DIR/$gist_id"
+  chmod 600 "$KEY_CACHE_DIR/$gist_id"
+fi
+
 source_url=$(jq -r '.html_url' <<<"$response")
 rendered_url="${VIEWER_BASE}?${gist_id}"
+if $encrypt; then
+  rendered_url="${rendered_url}#k=${master_key_b64url}"
+fi
 
 if $output_json; then
   jq -n --arg id "$gist_id" --arg src "$source_url" --arg rendered "$rendered_url" \
     --arg fn "$filename" --arg mt "$mime_type" --arg enc "$encoding" \
+    --argjson encrypted "$encrypt" \
     '{gist_id: $id, source_url: $src, rendered_url: $rendered,
-      filename: $fn, mime_type: $mt, encoding: $enc}'
+      filename: $fn, mime_type: $mt, encoding: $enc, encrypted: $encrypted}'
 else
   echo "Source:   $source_url"
   echo "Rendered: $rendered_url"
