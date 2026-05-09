@@ -28,7 +28,8 @@ Rendered: https://alecgard.github.io/share-file/?abc123
 (copied to clipboard)
 ```
 
-That rendered URL works for anyone you send it to.
+That rendered URL works for anyone you send it to. Here's a
+[live example](https://alecgard.github.io/share-file/?64a8a8cd0fbf41caac9ba9fca7fc353c).
 
 ## Use it from an agent
 
@@ -134,30 +135,9 @@ To switch viewers later without re-running setup:
 echo "https://my-team.github.io/share-file/" > ~/.config/share-file/viewer
 ```
 
-## Architecture
-
-```
-share-file (bash)  ──gh api──▶  GitHub gists (your account)
-                                       │
-                                       │ api.github.com/gists/<id>
-                                       ▼
-recipient's browser  ◀──fetch──  viewer (GitHub Pages)
-```
-
-- `bin/share-file` — creates or updates a secret gist using your `gh` auth.
-  Writes a `_meta.json` alongside the file recording filename, MIME type, and
-  encoding (raw for text, base64 for binary).
-- `index.html` — viewer deployed to GitHub Pages. Reads the gist ID from the
-  query string, fetches the gist via the GitHub API, dispatches on MIME type
-  to the right renderer (sandboxed iframe for HTML, `<img>` for images, etc.).
-- `bin/setup` — optional self-host installer. Forks the repo, enables Pages,
-  and points your local `share-file` at your own viewer.
-- `skill/SKILL.md` — agent skill so AI assistants can invoke the script.
-
 ## Limits and caveats
 
-- **Unguessable, not authenticated.** Anyone with the gist ID can view. Use
-  Cloudflare Access or equivalent if you need real auth.
+- **Unguessable, not authenticated.** Anyone with the gist ID can view.
 - **Rate limit.** Unauthenticated GitHub API allows 60 requests/hour per
   viewer IP. Self-hosting gives you your own rate-limit bucket.
 - **Single file per share.** Multi-file artifacts: inline assets or use a CDN.

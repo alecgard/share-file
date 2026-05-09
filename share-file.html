@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>share-file</title>
+<style>
+  :root {
+    --bg: #fafafa;
+    --surface: #fff;
+    --text: #1a1a2e;
+    --muted: #64748b;
+    --accent: #6366f1;
+    --accent2: #8b5cf6;
+    --code-bg: #1e1e2e;
+    --code-fg: #cdd6f4;
+    --code-comment: #6c7086;
+    --code-string: #a6e3a1;
+    --code-prompt: #89b4fa;
+    --border: #e2e8f0;
+    --card-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    color: var(--text); background: var(--bg);
+    line-height: 1.6; -webkit-font-smoothing: antialiased;
+  }
+
+  /* Hero */
+  .hero {
+    padding: 5rem 2rem 4rem;
+    text-align: center;
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a78bfa 100%);
+    color: white;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::after {
+    content: '';
+    position: absolute; inset: 0;
+    background: radial-gradient(circle at 30% 80%, rgba(255,255,255,0.08) 0%, transparent 50%),
+                radial-gradient(circle at 70% 20%, rgba(255,255,255,0.06) 0%, transparent 40%);
+  }
+  .hero > * { position: relative; z-index: 1; }
+  .hero h1 {
+    font-size: 3rem; font-weight: 700; letter-spacing: -0.03em;
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  }
+  .hero .tagline {
+    font-size: 1.2rem; max-width: 560px; margin: 1rem auto 0;
+    opacity: 0.92; line-height: 1.5;
+  }
+  .hero .pills {
+    display: flex; flex-wrap: wrap; gap: 0.5rem;
+    justify-content: center; margin-top: 2rem;
+  }
+  .hero .pill {
+    background: rgba(255,255,255,0.18); backdrop-filter: blur(4px);
+    border: 1px solid rgba(255,255,255,0.25);
+    padding: 0.4rem 1rem; border-radius: 99px;
+    font-size: 0.85rem; font-weight: 500;
+  }
+
+  /* Layout */
+  .container { max-width: 740px; margin: 0 auto; padding: 0 1.5rem; }
+  section { padding: 3.5rem 0; }
+  section + section { border-top: 1px solid var(--border); }
+
+  h2 {
+    font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em;
+    margin-bottom: 1rem;
+  }
+  h3 {
+    font-size: 1.1rem; font-weight: 600; margin: 2rem 0 0.5rem;
+  }
+  p { margin-bottom: 1rem; color: var(--text); }
+  p.muted { color: var(--muted); font-size: 0.92rem; }
+
+  /* Code blocks */
+  pre {
+    background: var(--code-bg); color: var(--code-fg);
+    padding: 1.25rem 1.5rem; border-radius: 10px;
+    overflow-x: auto; font-size: 0.85rem; line-height: 1.65;
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    margin: 0.75rem 0 1.25rem;
+    box-shadow: var(--card-shadow);
+  }
+  pre .prompt { color: var(--code-prompt); }
+  pre .comment { color: var(--code-comment); }
+  pre .string { color: var(--code-string); }
+  code {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: 0.88em; background: #f1f5f9; padding: 0.15em 0.4em;
+    border-radius: 4px;
+  }
+  pre code { background: none; padding: 0; font-size: inherit; }
+
+  /* Steps */
+  .steps { counter-reset: step; }
+  .step {
+    display: flex; gap: 1.25rem; margin-bottom: 2rem;
+    align-items: flex-start;
+  }
+  .step-num {
+    counter-increment: step;
+    flex-shrink: 0; width: 2.2rem; height: 2.2rem;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    color: white; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 0.9rem;
+    margin-top: 0.1rem;
+  }
+  .step-num::after { content: counter(step); }
+  .step-body { flex: 1; min-width: 0; }
+  .step-body h3 { margin-top: 0; }
+
+  /* Cards */
+  .card-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 0.75rem; margin: 1rem 0;
+  }
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 1rem 1.15rem;
+    box-shadow: var(--card-shadow);
+    font-size: 0.9rem;
+  }
+  .card strong { display: block; margin-bottom: 0.25rem; }
+
+  /* Lists */
+  ul, ol { margin: 0.5rem 0 1rem 1.25rem; }
+  li { margin-bottom: 0.35rem; font-size: 0.95rem; }
+  li code { font-size: 0.82rem; }
+
+  /* Callout */
+  .callout {
+    background: #fef3c7; border-left: 3px solid #f59e0b;
+    padding: 0.75rem 1rem; border-radius: 0 8px 8px 0;
+    font-size: 0.9rem; margin: 1rem 0;
+  }
+
+  /* Footer */
+  footer {
+    text-align: center; padding: 2.5rem 1rem;
+    color: var(--muted); font-size: 0.85rem;
+    border-top: 1px solid var(--border);
+  }
+  footer a { color: var(--accent); text-decoration: none; }
+  footer a:hover { text-decoration: underline; }
+
+  @media (max-width: 600px) {
+    .hero { padding: 3rem 1.5rem 2.5rem; }
+    .hero h1 { font-size: 2rem; }
+    .hero .tagline { font-size: 1rem; }
+    .step { flex-direction: column; gap: 0.5rem; }
+  }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <h1>share-file</h1>
+  <p class="tagline">
+    Publish any file to a shareable URL backed by a secret GitHub gist.
+    Anyone with the link can view it.
+  </p>
+  <div class="pills">
+    <span class="pill">Uses existing GitHub auth</span>
+    <span class="pill">Single bash script</span>
+    <span class="pill">Works from terminal or agent</span>
+    <span class="pill">Updates reuse the same URL</span>
+  </div>
+</div>
+
+<div class="container">
+
+<section>
+  <h2>Get started</h2>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num"></div>
+      <div class="step-body">
+        <h3>Install</h3>
+<pre><code>mkdir -p ~/.local/bin &amp;&amp; \
+  curl -fsSL https://raw.githubusercontent.com/alecgard/share-file/main/bin/share-file \
+    -o ~/.local/bin/share-file &amp;&amp; \
+  chmod +x ~/.local/bin/share-file</code></pre>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num"></div>
+      <div class="step-body">
+        <h3>Share a file</h3>
+<pre><code><span class="prompt">$</span> share-file dashboard.html
+<span class="comment">Source:   https://gist.github.com/you/abc123</span>
+<span class="comment">Rendered: https://alecgard.github.io/share-file/?abc123</span>
+<span class="string">(copied to clipboard)</span></code></pre>
+        <p class="muted">That rendered URL works for anyone you send it to.
+          Here's a <a href="https://alecgard.github.io/share-file/?64a8a8cd0fbf41caac9ba9fca7fc353c" style="color:var(--accent)">live example</a>.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Use it from an agent</h2>
+  <p>Install the agent skill so <a href="https://claude.ai/code" style="color:var(--accent)">Claude Code</a>
+    (or any agent that loads skills) can call <code>share-file</code> for you:</p>
+<pre><code>mkdir -p ~/.claude/skills/share-file &amp;&amp; \
+  curl -fsSL https://raw.githubusercontent.com/alecgard/share-file/main/skill/SKILL.md \
+    -o ~/.claude/skills/share-file/SKILL.md</code></pre>
+  <p>Then ask things like <em>"share this dashboard with my team"</em> or
+    <em>"give me a link to that screenshot"</em> &mdash; it calls
+    <code>share-file --json</code> and replies with the rendered URL.</p>
+  <p class="muted">For project-scoped install, drop it in <code>.claude/skills/share-file/</code>
+    inside the repo instead.</p>
+</section>
+
+<section>
+  <h2>Common operations</h2>
+
+  <h3>Update an existing share</h3>
+  <p class="muted">The URL stays the same.</p>
+<pre><code>share-file --update abc123 dashboard.html</code></pre>
+
+  <h3>Read from stdin</h3>
+<pre><code>echo "$html" | share-file --stdin --filename report.html</code></pre>
+  <p class="muted"><code>--filename</code> is required so the viewer can detect the MIME type.</p>
+
+  <h3>JSON output for scripts and agents</h3>
+<pre><code><span class="prompt">$</span> share-file --json /path/to/chart.png
+{
+  <span class="string">"gist_id"</span>: "abc123",
+  <span class="string">"source_url"</span>: "https://gist.github.com/you/abc123",
+  <span class="string">"rendered_url"</span>: "https://alecgard.github.io/share-file/?abc123",
+  <span class="string">"filename"</span>: "chart.png",
+  <span class="string">"mime_type"</span>: "image/png",
+  <span class="string">"encoding"</span>: "base64"
+}</code></pre>
+
+  <h3>Public gist instead of secret</h3>
+<pre><code>share-file --public --desc <span class="string">"Q3 results"</span> dashboard.html</code></pre>
+</section>
+
+<section>
+  <h2>Supported file types</h2>
+  <div class="card-grid">
+    <div class="card"><strong>HTML</strong>Sandboxed iframe</div>
+    <div class="card"><strong>Images</strong>PNG, JPG, GIF, SVG, WebP</div>
+    <div class="card"><strong>Documents</strong>PDF, Markdown, plain text</div>
+    <div class="card"><strong>Media</strong>Audio and video</div>
+    <div class="card"><strong>Code</strong>JSON, XML, source files</div>
+    <div class="card"><strong>Anything else</strong>Download link</div>
+  </div>
+  <p class="muted">Size limit: 900 KB encoded payload (~675 KB raw for binaries).</p>
+</section>
+
+<section>
+  <h2>Self-host your own viewer</h2>
+  <p>By default shares render through the public viewer at
+    <code>alecgard.github.io/share-file/</code>. You might want your own for a
+    dedicated rate-limit bucket, your own domain, or independence from the
+    public viewer's uptime.</p>
+  <p>Gists created against either viewer work in both &mdash; the gist ID travels.</p>
+<pre><code>gh repo clone alecgard/share-file
+cd share-file
+./bin/setup</code></pre>
+  <p class="muted">Re-running is safe. After ~30s your viewer is live at
+    <code>https://&lt;you&gt;.github.io/share-file/</code>.</p>
+
+  <h3>How the script picks a viewer</h3>
+  <ol>
+    <li><code>$SHARE_FILE_VIEWER</code> env var (overrides everything)</li>
+    <li><code>~/.config/share-file/viewer</code> (written by <code>bin/setup</code>)</li>
+    <li>Public default (<code>https://alecgard.github.io/share-file/</code>)</li>
+  </ol>
+</section>
+
+<section>
+  <h2>Limits and caveats</h2>
+  <div class="callout">
+    Gist URLs are unguessable but not access-controlled. Don't share sensitive content.
+  </div>
+  <ul>
+    <li><strong>Unguessable, not authenticated.</strong> Anyone with the gist ID can view.</li>
+    <li><strong>Rate limit.</strong> Unauthenticated GitHub API allows 60 req/hr per viewer IP.
+      Self-hosting gives you your own bucket.</li>
+    <li><strong>Single file per share.</strong> Multi-file artifacts: inline assets or use a CDN.</li>
+  </ul>
+</section>
+
+</div>
+
+<footer>
+  <a href="https://github.com/alecgard/share-file">github.com/alecgard/share-file</a>
+</footer>
+
+</body>
+</html>
