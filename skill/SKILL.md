@@ -64,7 +64,7 @@ Pass `--encrypt` when the user asks for a private share, or when the content is 
 share-file --json --encrypt /path/to/file.html
 ```
 
-Returns the same JSON shape with `"encrypted": true` and `rendered_url` containing the decryption key as a URL fragment (`#k=...`). The full URL is the secret — anyone with it can decrypt; lose it and content is unrecoverable. Re-shares of `--update` work as normal (key is cached locally so the URL stays stable). Not compatible with `--public`; `--desc` is ignored under `--encrypt`.
+Returns the same JSON shape with `"encrypted": true` and `rendered_url` containing the decryption key as a URL fragment (`#k=...`). The full URL is the secret — anyone with it can decrypt; lose it and content is unrecoverable. `--update` reuses the same key so the URL stays stable; pass either the bare gist ID (uses local key cache) or the full rendered URL (extracts the key from the fragment). Not compatible with `--public`; `--desc` is ignored under `--encrypt`.
 
 ## After publishing
 

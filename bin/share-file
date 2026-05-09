@@ -19,13 +19,15 @@ share-file: publish a file to a shareable URL via GitHub gist
 Usage:
   share-file [flags] <file>
   share-file [flags] --stdin --filename <name>
-  share-file [flags] --update <gist-id> <file>
+  share-file [flags] --update <gist-id|rendered-url> <file>
 
 Flags:
   --desc <text>       Gist description (default: "Shared file")
   --public            Create a public (listed) gist instead of secret
   --encrypt           Encrypt content client-side; key goes in URL fragment
-  --update <id>       Update an existing gist instead of creating a new one
+  --update <id|url>   Update an existing gist (accepts a bare ID, or a full
+                      rendered URL — needed to update encrypted shares from
+                      a machine that doesn't have the key cached)
   --stdin             Read content from stdin (requires --filename)
   --filename <name>   Filename to use (overrides basename / required with --stdin)
   --mime <type>       Override MIME type detection
@@ -134,6 +136,24 @@ if $encrypt && $public; then
   exit 1
 fi
 
+# --update accepts either a bare gist ID or a full rendered URL like
+# "https://.../?<gist_id>#k=<key>". When given a URL, extract both.
+update_key_from_url=""
+if [[ "$update_id" == *"?"* ]]; then
+  rest="${update_id#*\?}"
+  if [[ "$rest" == *"#"* ]]; then
+    gist_part="${rest%%#*}"
+    frag_part="${rest#*#}"
+    case "$frag_part" in
+      k=*) update_key_from_url="${frag_part#k=}"; update_key_from_url="${update_key_from_url%%&*}" ;;
+      *k=*) update_key_from_url="${frag_part##*k=}"; update_key_from_url="${update_key_from_url%%&*}" ;;
+    esac
+  else
+    gist_part="$rest"
+  fi
+  update_id="${gist_part%%&*}"
+fi
+
 command -v gh   >/dev/null || { echo "error: gh not installed (https://cli.github.com)" >&2; exit 1; }
 command -v jq   >/dev/null || { echo "error: jq not installed" >&2; exit 1; }
 command -v file >/dev/null || { echo "error: file(1) not installed" >&2; exit 1; }
@@ -182,14 +202,18 @@ esac
 master_key_b64url=""
 if $encrypt; then
   # For encrypted updates, reuse the original key so the URL stays stable.
+  # Key sources: --update <full-url-with-fragment>, or local cache.
   existing_key=""
   if [[ -n "$update_id" ]]; then
-    if [[ -f "$KEY_CACHE_DIR/$update_id" ]]; then
+    if [[ -n "$update_key_from_url" ]]; then
+      existing_key="$update_key_from_url"
+    elif [[ -f "$KEY_CACHE_DIR/$update_id" ]]; then
       existing_key=$(cat "$KEY_CACHE_DIR/$update_id")
     else
-      echo "error: no cached key for gist $update_id at $KEY_CACHE_DIR/$update_id" >&2
-      echo "  share-file only re-encrypts gists whose key it has cached locally." >&2
-      echo "  copy the key file from the machine that created the gist, or create a new share." >&2
+      echo "error: no decryption key available for gist $update_id" >&2
+      echo "  pass the full rendered URL to --update (it has the key in #k=...)," >&2
+      echo "  or run from the machine that created the share (key is cached at" >&2
+      echo "  $KEY_CACHE_DIR/$update_id)." >&2
       exit 1
     fi
   fi
