@@ -1,0 +1,56 @@
+name: Release MCPB
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'mcpb/**'
+      - 'bin/share-file'
+      - '.github/workflows/release.yml'
+  pull_request:
+    paths:
+      - 'mcpb/**'
+      - 'bin/share-file'
+      - '.github/workflows/release.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build MCPB
+        run: ./bin/build-mcpb
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: share-file-mcpb
+          path: dist/share-file.mcpb
+
+      - name: Publish release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version=$(jq -r .version mcpb/manifest.json)
+          short_sha=$(git rev-parse --short HEAD)
+          tag="v${version}-${short_sha}"
+
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release $tag already exists; updating asset."
+            gh release upload "$tag" dist/share-file.mcpb --clobber
+          else
+            gh release create "$tag" dist/share-file.mcpb \
+              --title "share-file v${version} (${short_sha})" \
+              --notes "Automated build from ${{ github.sha }}."
+          fi
