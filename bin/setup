@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+# share-file/bin/setup: one-command self-host setup.
+#
+# Forks the share-file repo to your GitHub account, enables GitHub Pages so
+# you have your own viewer at <you>.github.io/share-file/, and installs the
+# script and agent skill locally pointing at that viewer.
+#
+# Re-running this script is safe — it skips steps that are already done.
+set -euo pipefail
+
+UPSTREAM="${SHARE_FILE_UPSTREAM:-alecgard/share-file}"
+REPO_NAME="${SHARE_FILE_REPO:-share-file}"
+BIN_DIR="${SHARE_FILE_BIN_DIR:-$HOME/.local/bin}"
+SKILL_DIR="${SHARE_FILE_SKILL_DIR:-$HOME/.claude/skills/share-file}"
+CONFIG_DIR="$HOME/.config/share-file"
+
+command -v gh   >/dev/null || { echo "error: gh not installed (https://cli.github.com)" >&2; exit 1; }
+command -v curl >/dev/null || { echo "error: curl not installed" >&2; exit 1; }
+gh auth status >/dev/null 2>&1 || { echo "error: not logged in. run: gh auth login" >&2; exit 1; }
+
+user=$(gh api user --jq .login)
+viewer_url="https://${user}.github.io/${REPO_NAME}/"
+
+echo "Setting up share-file for @${user}"
+echo "  Repo:    ${user}/${REPO_NAME}"
+echo "  Viewer:  ${viewer_url}"
+echo
+
+# 1. Fork (or reuse existing repo)
+if gh repo view "${user}/${REPO_NAME}" >/dev/null 2>&1; then
+  echo "[1/4] Repo ${user}/${REPO_NAME} already exists — reusing"
+else
+  echo "[1/4] Forking ${UPSTREAM} -> ${user}/${REPO_NAME}..."
+  gh repo fork "${UPSTREAM}" --clone=false >/dev/null
+fi
+
+# 2. Enable GitHub Pages (idempotent — fails harmlessly if already on)
+echo "[2/4] Enabling GitHub Pages on ${user}/${REPO_NAME}..."
+if gh api -X POST "repos/${user}/${REPO_NAME}/pages" \
+     -f "source[branch]=main" -f "source[path]=/" >/dev/null 2>&1; then
+  echo "       enabled"
+else
+  echo "       already enabled (or pending)"
+fi
+
+# 3. Install the script
+echo "[3/4] Installing script to ${BIN_DIR}/share-file"
+mkdir -p "${BIN_DIR}"
+curl -fsSL "https://raw.githubusercontent.com/${UPSTREAM}/main/bin/share-file" \
+  -o "${BIN_DIR}/share-file"
+chmod +x "${BIN_DIR}/share-file"
+
+# 4. Install the agent skill
+echo "[4/4] Installing agent skill to ${SKILL_DIR}/SKILL.md"
+mkdir -p "${SKILL_DIR}"
+curl -fsSL "https://raw.githubusercontent.com/${UPSTREAM}/main/skill/SKILL.md" \
+  -o "${SKILL_DIR}/SKILL.md"
+
+# Persist the user's viewer URL so the script defaults to it
+mkdir -p "${CONFIG_DIR}"
+printf '%s\n' "${viewer_url}" > "${CONFIG_DIR}/viewer"
+
+cat <<EOF
+
+Setup complete. Your viewer goes live at ${viewer_url} within ~30 seconds.
+
+  Script:  ${BIN_DIR}/share-file
+  Skill:   ${SKILL_DIR}/SKILL.md
+  Config:  ${CONFIG_DIR}/viewer
+
+If ${BIN_DIR} is not on your PATH, add it to your shell rc:
+  export PATH="${BIN_DIR}:\$PATH"
+
+Try it:
+  share-file --help
+  share-file path/to/file.html
+EOF

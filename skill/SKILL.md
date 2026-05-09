@@ -1,0 +1,69 @@
+---
+name: share-file
+description: Publish a file to a shareable URL via GitHub gist. Use when the user wants to share any single browser-renderable artifact — HTML page, image, PDF, screenshot, mockup, report, generated chart, audio/video clip, or text/source file. Produces a clickable URL backed by a secret gist that renders via a static viewer. Triggers include "share this", "send to my team", "give me a link", "publish this". Do not use for content requiring authenticated access, files >900KB, or content the user has flagged sensitive.
+---
+
+# share-file
+
+Publishes a file as a secret GitHub gist and returns a rendered viewer URL. Works for any file type the browser can render (HTML, images, PDFs, audio, video, text/source); other binaries get a download link in the viewer.
+
+## Invocation
+
+The `share-file` bash script is on the user's PATH. Use `--json` for parseable output:
+
+```bash
+share-file --json --desc "Q3 dashboard" /path/to/file.html
+```
+
+Returns:
+
+```json
+{
+  "gist_id": "abc123",
+  "source_url": "https://gist.github.com/<user>/abc123",
+  "rendered_url": "https://alecgard.github.io/share-file/?abc123",
+  "filename": "file.html",
+  "mime_type": "text/html",
+  "encoding": "raw"
+}
+```
+
+## Updating an existing share
+
+To revise something previously shared without changing the URL:
+
+```bash
+share-file --json --update <gist-id> /path/to/file.html
+```
+
+The rendered URL stays the same; the gist gets a new commit. The new file replaces the previous one (filename and MIME may change between versions).
+
+## From stdin
+
+When content is in memory rather than a file:
+
+```bash
+echo "$html" | share-file --json --stdin --filename report.html --desc "..."
+```
+
+`--filename` is required so the viewer knows the name and MIME type.
+
+## Overriding MIME type
+
+If `file(1)` mis-detects (e.g. an extensionless JSON file):
+
+```bash
+share-file --json --mime application/json --filename data.json data
+```
+
+## After publishing
+
+Report the `rendered_url` to the user as the share link. Mention `source_url`
+only if relevant (they want to edit the gist directly).
+
+## Don't use for
+
+- Content requiring authenticated access — gist URLs are unguessable but not access-controlled
+- Files >900KB (binary files are base64-encoded, so the raw size budget is ~675KB)
+- Content the user has flagged as sensitive
+- Multi-file artifacts (one file per gist; inline assets or use a CDN for HTML)

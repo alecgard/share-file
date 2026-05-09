@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Loading…</title>
+<style>
+  html, body { margin: 0; padding: 0; height: 100vh; overflow: hidden;
+               font-family: system-ui, sans-serif; }
+  #bar { display: flex; gap: 1rem; padding: 0.5rem 1rem;
+         background: #f6f8fa; border-bottom: 1px solid #d1d9e0; font-size: 13px;
+         align-items: center; }
+  #bar a { color: #0969da; text-decoration: none; }
+  #bar a:hover { text-decoration: underline; }
+  #content { width: 100%; height: calc(100vh - 37px); overflow: auto;
+             display: flex; align-items: center; justify-content: center;
+             background: #fafbfc; }
+  #content iframe, #content embed { border: 0; width: 100%; height: 100%;
+                                     background: white; }
+  #content img, #content video { max-width: 100%; max-height: 100%; object-fit: contain; }
+  #content audio { width: 80%; }
+  #content pre { width: 100%; height: 100%; margin: 0; padding: 1rem;
+                 box-sizing: border-box; overflow: auto; background: white;
+                 font-family: ui-monospace, Menlo, Consolas, monospace;
+                 font-size: 13px; white-space: pre-wrap; word-wrap: break-word; }
+  #content .download { padding: 2rem; font-size: 15px; }
+  .err { padding: 2rem; color: #cf222e; font-family: system-ui, sans-serif; }
+</style>
+</head>
+<body>
+<div id="bar"></div>
+<div id="content"></div>
+<script>
+function showError(msg) {
+  document.body.innerHTML = '<div class="err"></div>';
+  document.querySelector('.err').textContent = msg;
+}
+
+function b64ToBlob(b64, mime) {
+  const bin = atob(b64);
+  const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return new Blob([arr], { type: mime });
+}
+
+function isTextMime(mime) {
+  return mime.startsWith('text/') ||
+         /^application\/(json|xml|javascript|x-yaml|yaml)$/.test(mime) ||
+         mime === 'image/svg+xml';
+}
+
+function renderFile(filename, content, mime, encoding) {
+  const container = document.getElementById('content');
+  container.innerHTML = '';
+
+  let text = null;
+  let blobUrl = null;
+  if (encoding === 'base64') {
+    blobUrl = URL.createObjectURL(b64ToBlob(content, mime));
+    if (isTextMime(mime) || mime === 'text/html') {
+      try { text = atob(content); } catch (_) {}
+    }
+  } else {
+    text = content;
+    blobUrl = URL.createObjectURL(new Blob([content], { type: mime }));
+  }
+
+  if (mime === 'text/html') {
+    const iframe = document.createElement('iframe');
+    iframe.sandbox = 'allow-scripts allow-popups allow-forms';
+    iframe.srcdoc = text;
+    container.appendChild(iframe);
+  } else if (mime === 'image/svg+xml') {
+    const img = document.createElement('img');
+    img.src = blobUrl;
+    img.alt = filename;
+    container.appendChild(img);
+  } else if (mime.startsWith('image/')) {
+    const img = document.createElement('img');
+    img.src = blobUrl;
+    img.alt = filename;
+    container.appendChild(img);
+  } else if (mime === 'application/pdf') {
+    const embed = document.createElement('embed');
+    embed.src = blobUrl;
+    embed.type = 'application/pdf';
+    container.appendChild(embed);
+  } else if (mime.startsWith('audio/')) {
+    const audio = document.createElement('audio');
+    audio.controls = true;
+    audio.src = blobUrl;
+    container.appendChild(audio);
+  } else if (mime.startsWith('video/')) {
+    const video = document.createElement('video');
+    video.controls = true;
+    video.src = blobUrl;
+    container.appendChild(video);
+  } else if (isTextMime(mime)) {
+    const pre = document.createElement('pre');
+    pre.textContent = text;
+    container.appendChild(pre);
+  } else {
+    const wrap = document.createElement('div');
+    wrap.className = 'download';
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = filename;
+    a.textContent = 'Download ' + filename;
+    wrap.appendChild(a);
+    const note = document.createElement('div');
+    note.style.color = '#656d76';
+    note.style.marginTop = '0.5rem';
+    note.style.fontSize = '13px';
+    note.textContent = mime + ' — no inline preview available';
+    wrap.appendChild(note);
+    container.appendChild(wrap);
+  }
+}
+
+async function fetchContent(file) {
+  if (!file.truncated) return file.content;
+  const res = await fetch(file.raw_url);
+  return res.text();
+}
+
+async function main() {
+  const id = (location.search.slice(1) || location.hash.slice(1)).trim();
+  if (!id) {
+    showError('Usage: ?<gist-id>');
+    return;
+  }
+
+  let gist;
+  try {
+    const res = await fetch('https://api.github.com/gists/' + encodeURIComponent(id));
+    if (!res.ok) {
+      showError('Failed to fetch gist: ' + res.status);
+      return;
+    }
+    gist = await res.json();
+  } catch (e) {
+    showError('Network error: ' + e.message);
+    return;
+  }
+
+  let filename, mime, encoding;
+  const metaFile = gist.files['_meta.json'];
+  if (metaFile) {
+    try {
+      const meta = JSON.parse(await fetchContent(metaFile));
+      filename = meta.filename;
+      mime = meta.mime_type;
+      encoding = meta.encoding;
+    } catch (e) {
+      showError('Invalid _meta.json: ' + e.message);
+      return;
+    }
+  } else {
+    const fallback = gist.files['index.html'] ||
+                     Object.values(gist.files).find(f => f.filename.endsWith('.html')) ||
+                     Object.values(gist.files)[0];
+    if (!fallback) { showError('No file found in gist'); return; }
+    filename = fallback.filename;
+    mime = fallback.type || 'text/plain';
+    encoding = 'raw';
+  }
+
+  const file = gist.files[filename];
+  if (!file) {
+    showError('File "' + filename + '" not found in gist');
+    return;
+  }
+
+  let content;
+  try {
+    content = await fetchContent(file);
+  } catch (e) {
+    showError('Failed to load file content: ' + e.message);
+    return;
+  }
+
+  document.title = filename;
+  const bar = document.getElementById('bar');
+  const strong = document.createElement('strong');
+  strong.textContent = filename;
+  const link = document.createElement('a');
+  link.href = gist.html_url;
+  link.target = '_blank';
+  link.rel = 'noopener';
+  link.textContent = 'source';
+  const owner = document.createElement('span');
+  owner.style.color = '#656d76';
+  owner.textContent = 'by ' + (gist.owner && gist.owner.login || 'anonymous');
+  bar.appendChild(strong);
+  bar.appendChild(link);
+  bar.appendChild(owner);
+
+  renderFile(filename, content, mime, encoding);
+}
+main();
+</script>
+</body>
+</html>

@@ -1,0 +1,164 @@
+# share-file
+
+Publish any single file — HTML page, image, PDF, screenshot, dashboard, audio
+clip, video, source file, generated report — to a shareable URL backed by a
+secret GitHub gist. Anyone with the link can view it through a static viewer
+hosted on GitHub Pages.
+
+- Uses your existing GitHub auth via the `gh` CLI.
+- Single bash script, no build step.
+- Works from a terminal or as a tool an agent can call.
+- Updates reuse the same URL.
+
+## Install
+
+```bash
+mkdir -p ~/.local/bin && \
+  curl -fsSL https://raw.githubusercontent.com/alecgard/share-file/main/bin/share-file \
+    -o ~/.local/bin/share-file && \
+  chmod +x ~/.local/bin/share-file
+```
+
+## Share a file
+
+```bash
+$ share-file dashboard.html
+Source:   https://gist.github.com/<you>/abc123
+Rendered: https://alecgard.github.io/share-file/?abc123
+(copied to clipboard)
+```
+
+That rendered URL works for anyone you send it to.
+
+## Use it from an agent
+
+Install the agent skill so [Claude Code](https://claude.ai/code) (or any agent
+that loads skills) can call `share-file` for you:
+
+```bash
+mkdir -p ~/.claude/skills/share-file && \
+  curl -fsSL https://raw.githubusercontent.com/alecgard/share-file/main/skill/SKILL.md \
+    -o ~/.claude/skills/share-file/SKILL.md
+```
+
+Then ask the agent things like "share this dashboard with my team" or "give me a link to
+that screenshot" — it'll call `share-file --json` and reply with the rendered
+URL. For project-scoped install, drop it in `.claude/skills/share-file/`
+inside the repo instead.
+
+## Common operations
+
+### Update an existing share (URL stays the same)
+
+```bash
+share-file --update abc123 dashboard.html
+```
+
+### Read from stdin
+
+```bash
+echo "$html" | share-file --stdin --filename report.html
+```
+
+`--filename` is required so the viewer can detect the MIME type.
+
+### JSON output for scripts and agents
+
+```bash
+$ share-file --json /path/to/chart.png
+{
+  "gist_id": "abc123",
+  "source_url": "https://gist.github.com/<you>/abc123",
+  "rendered_url": "https://alecgard.github.io/share-file/?abc123",
+  "filename": "chart.png",
+  "mime_type": "image/png",
+  "encoding": "base64"
+}
+```
+
+### Public (listed) gist instead of secret
+
+```bash
+share-file --public --desc "Q3 results" dashboard.html
+```
+
+## Supported file types
+
+Renders inline in the viewer:
+
+- HTML (sandboxed iframe)
+- Images: PNG, JPG, GIF, SVG, WebP
+- PDFs
+- Audio and video
+- Plain text, Markdown, JSON, XML, source code
+
+Anything else is offered as a download link.
+
+Size limit: 900KB encoded payload (~675KB raw for binaries; the gist API gets
+unreliable above 1MB).
+
+## Self-host your own viewer
+
+By default shares render through the public viewer at
+`alecgard.github.io/share-file/`. The viewer is static and only fetches the
+gist by ID, so there's no shared backend.
+
+You might want your own viewer for: a dedicated rate-limit bucket, your own
+domain or team-scoped instance, or independence from the public viewer's
+uptime. Gists you created against the public viewer keep working in your
+viewer (and vice versa) — the gist ID travels.
+
+One command does the whole thing — forks the repo, enables GitHub Pages on
+the fork, and points your local `share-file` at the new viewer:
+
+```bash
+gh repo clone alecgard/share-file
+cd share-file
+./bin/setup
+```
+
+Re-running is safe — it skips steps already done. After ~30s your viewer is
+live at `https://<you>.github.io/share-file/`.
+
+### How the script picks a viewer
+
+Resolution order:
+
+1. `$SHARE_FILE_VIEWER` env var (overrides everything; useful per-shell)
+2. `~/.config/share-file/viewer` (written by `bin/setup`)
+3. Public default (`https://alecgard.github.io/share-file/`)
+
+To switch viewers later without re-running setup:
+
+```bash
+echo "https://my-team.github.io/share-file/" > ~/.config/share-file/viewer
+```
+
+## Architecture
+
+```
+share-file (bash)  ──gh api──▶  GitHub gists (your account)
+                                       │
+                                       │ api.github.com/gists/<id>
+                                       ▼
+recipient's browser  ◀──fetch──  viewer (GitHub Pages)
+```
+
+- `bin/share-file` — creates or updates a secret gist using your `gh` auth.
+  Writes a `_meta.json` alongside the file recording filename, MIME type, and
+  encoding (raw for text, base64 for binary).
+- `index.html` — viewer deployed to GitHub Pages. Reads the gist ID from the
+  query string, fetches the gist via the GitHub API, dispatches on MIME type
+  to the right renderer (sandboxed iframe for HTML, `<img>` for images, etc.).
+- `bin/setup` — optional self-host installer. Forks the repo, enables Pages,
+  and points your local `share-file` at your own viewer.
+- `skill/SKILL.md` — agent skill so AI assistants can invoke the script.
+
+## Limits and caveats
+
+- **Unguessable, not authenticated.** Anyone with the gist ID can view. Use
+  Cloudflare Access or equivalent if you need real auth.
+- **Rate limit.** Unauthenticated GitHub API allows 60 requests/hour per
+  viewer IP. Self-hosting gives you your own rate-limit bucket.
+- **Single file per share.** Multi-file artifacts: inline assets or use a CDN.
+- **Don't share sensitive content.** Gist URLs are unguessable but not access-controlled.

@@ -1,0 +1,154 @@
+#!/usr/bin/env bash
+# share-file: publish a file as a GitHub gist, return a rendered viewer URL
+set -euo pipefail
+
+# Resolve viewer URL: env var > local config > public default.
+# Self-hosters: `bin/setup` writes ~/.config/share-file/viewer.
+VIEWER_BASE="${SHARE_FILE_VIEWER:-}"
+if [[ -z "$VIEWER_BASE" ]] && [[ -f "$HOME/.config/share-file/viewer" ]]; then
+  VIEWER_BASE=$(cat "$HOME/.config/share-file/viewer")
+fi
+VIEWER_BASE="${VIEWER_BASE:-https://alecgard.github.io/share-file/}"
+SIZE_LIMIT=900000  # ~900KB; gist API gets unreliable above 1MB
+
+usage() {
+  cat <<EOF >&2
+share-file: publish a file to a shareable URL via GitHub gist
+
+Usage:
+  share-file [flags] <file>
+  share-file [flags] --stdin --filename <name>
+  share-file [flags] --update <gist-id> <file>
+
+Flags:
+  --desc <text>       Gist description (default: "Shared file")
+  --public            Create a public (listed) gist instead of secret
+  --update <id>       Update an existing gist instead of creating a new one
+  --stdin             Read content from stdin (requires --filename)
+  --filename <name>   Filename to use (overrides basename / required with --stdin)
+  --mime <type>       Override MIME type detection
+  --json              Output JSON (for agents and scripts)
+  -h, --help          Show this help
+
+Renderable in the viewer: HTML, images (PNG/JPG/GIF/SVG/WebP), PDF,
+plain text / source / JSON / XML / Markdown, audio, video. Other types
+produce a download link. Binary files are base64-encoded into the gist.
+
+Requires: gh (https://cli.github.com), jq, file. Authenticated via 'gh auth login'.
+EOF
+  exit "${1:-2}"
+}
+
+desc="Shared file"
+public=false
+update_id=""
+use_stdin=false
+output_json=false
+file=""
+filename_override=""
+mime_override=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --desc)     desc="$2"; shift 2 ;;
+    --public)   public=true; shift ;;
+    --update)   update_id="$2"; shift 2 ;;
+    --stdin)    use_stdin=true; shift ;;
+    --filename) filename_override="$2"; shift 2 ;;
+    --mime)     mime_override="$2"; shift 2 ;;
+    --json)     output_json=true; shift ;;
+    -h|--help)  usage 0 ;;
+    -*) echo "unknown flag: $1" >&2; usage ;;
+    *)  file="$1"; shift ;;
+  esac
+done
+
+command -v gh   >/dev/null || { echo "error: gh not installed (https://cli.github.com)" >&2; exit 1; }
+command -v jq   >/dev/null || { echo "error: jq not installed" >&2; exit 1; }
+command -v file >/dev/null || { echo "error: file(1) not installed" >&2; exit 1; }
+command -v base64 >/dev/null || { echo "error: base64 not installed" >&2; exit 1; }
+gh auth status >/dev/null 2>&1 || { echo "error: not logged in. run: gh auth login" >&2; exit 1; }
+
+if $use_stdin; then
+  [[ -n "$filename_override" ]] || { echo "error: --stdin requires --filename" >&2; exit 1; }
+  tmpfile=$(mktemp)
+  trap 'rm -f "$tmpfile"' EXIT
+  cat > "$tmpfile"
+  src_path="$tmpfile"
+  filename="$filename_override"
+else
+  [[ -n "$file" ]] || usage
+  [[ -f "$file" ]] || { echo "error: file not found: $file" >&2; exit 1; }
+  src_path="$file"
+  filename="${filename_override:-$(basename "$file")}"
+fi
+
+if [[ "$filename" == "_meta.json" ]]; then
+  echo "error: filename '_meta.json' is reserved" >&2
+  exit 1
+fi
+
+if [[ -n "$mime_override" ]]; then
+  mime_type="$mime_override"
+else
+  mime_type=$(file --mime-type -b "$src_path")
+fi
+
+# text-ish MIME types are stored raw; everything else is base64-encoded
+case "$mime_type" in
+  text/*|application/json|application/xml|application/javascript|application/x-yaml|application/yaml|image/svg+xml)
+    encoding="raw"
+    content=$(cat "$src_path")
+    ;;
+  *)
+    encoding="base64"
+    content=$(base64 < "$src_path" | tr -d '\n')
+    ;;
+esac
+
+size=${#content}
+if (( size > SIZE_LIMIT )); then
+  echo "error: payload is ${size} bytes (>${SIZE_LIMIT}), gist may reject or truncate" >&2
+  if [[ "$encoding" == "base64" ]]; then
+    echo "  binary files are base64-encoded (~33% overhead); try a smaller file" >&2
+  else
+    echo "  check for inline base64 images or embedded datasets" >&2
+  fi
+  exit 1
+fi
+
+meta_json=$(jq -n --arg fn "$filename" --arg mt "$mime_type" --arg enc "$encoding" \
+  '{filename: $fn, mime_type: $mt, encoding: $enc}')
+
+if [[ -n "$update_id" ]]; then
+  body=$(jq -n --arg fn "$filename" --arg c "$content" --arg meta "$meta_json" \
+    '{files: ({} | .["_meta.json"] = {content: $meta} | .[$fn] = {content: $c})}')
+  response=$(gh api -X PATCH "gists/$update_id" --input - <<<"$body")
+  gist_id="$update_id"
+else
+  body=$(jq -n --arg desc "$desc" --argjson public "$public" \
+    --arg fn "$filename" --arg c "$content" --arg meta "$meta_json" \
+    '{description: $desc, public: $public,
+      files: ({} | .["_meta.json"] = {content: $meta} | .[$fn] = {content: $c})}')
+  response=$(gh api -X POST gists --input - <<<"$body")
+  gist_id=$(jq -r '.id' <<<"$response")
+fi
+
+source_url=$(jq -r '.html_url' <<<"$response")
+rendered_url="${VIEWER_BASE}?${gist_id}"
+
+if $output_json; then
+  jq -n --arg id "$gist_id" --arg src "$source_url" --arg rendered "$rendered_url" \
+    --arg fn "$filename" --arg mt "$mime_type" --arg enc "$encoding" \
+    '{gist_id: $id, source_url: $src, rendered_url: $rendered,
+      filename: $fn, mime_type: $mt, encoding: $enc}'
+else
+  echo "Source:   $source_url"
+  echo "Rendered: $rendered_url"
+  if command -v pbcopy >/dev/null 2>&1; then
+    printf '%s' "$rendered_url" | pbcopy && echo "(copied to clipboard)" >&2
+  elif command -v xclip >/dev/null 2>&1; then
+    printf '%s' "$rendered_url" | xclip -selection clipboard \
+      && echo "(copied to clipboard)" >&2
+  fi
+fi
