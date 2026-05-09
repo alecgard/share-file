@@ -5,208 +5,230 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>share-file</title>
 <style>
+  @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
   :root {
-    --bg: #fafafa;
+    --bg: #f8f5f0;
     --surface: #fff;
-    --text: #1a1a2e;
-    --muted: #64748b;
-    --accent: #6366f1;
-    --accent2: #8b5cf6;
-    --code-bg: #1e1e2e;
-    --code-fg: #cdd6f4;
-    --code-comment: #6c7086;
-    --code-string: #a6e3a1;
-    --code-prompt: #89b4fa;
-    --border: #e2e8f0;
-    --card-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+    --text: #2c2c2c;
+    --muted: #7a756e;
+    --accent: #c45d3e;
+    --accent-light: #f0d8cf;
+    --code-bg: #2c2c2c;
+    --code-fg: #e8e2d9;
+    --code-comment: #8a8478;
+    --code-string: #b8c990;
+    --code-prompt: #d4a56a;
+    --border: #ddd6cb;
+    --serif: 'Instrument Serif', Georgia, 'Times New Roman', serif;
+    --sans: 'Inter', -apple-system, system-ui, sans-serif;
+    --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html { scroll-behavior: smooth; }
   body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-    color: var(--text); background: var(--bg);
-    line-height: 1.6; -webkit-font-smoothing: antialiased;
+    font-family: var(--sans); color: var(--text);
+    background: var(--bg); line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
   }
 
-  /* Hero */
-  .hero {
-    padding: 5rem 2rem 4rem;
-    text-align: center;
-    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a78bfa 100%);
-    color: white;
-    position: relative;
-    overflow: hidden;
+  /* Header */
+  header {
+    max-width: 720px; margin: 0 auto;
+    padding: 5rem 2rem 3.5rem;
   }
-  .hero::after {
-    content: '';
-    position: absolute; inset: 0;
-    background: radial-gradient(circle at 30% 80%, rgba(255,255,255,0.08) 0%, transparent 50%),
-                radial-gradient(circle at 70% 20%, rgba(255,255,255,0.06) 0%, transparent 40%);
+  .eyebrow {
+    font-size: 0.72rem; font-weight: 500;
+    letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--muted); margin-bottom: 1.5rem;
+    display: flex; align-items: center; gap: 0.75rem;
   }
-  .hero > * { position: relative; z-index: 1; }
-  .hero h1 {
-    font-size: 3rem; font-weight: 700; letter-spacing: -0.03em;
-    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  .eyebrow::before, .eyebrow::after {
+    content: ''; height: 1px; width: 2rem;
+    background: var(--border);
   }
-  .hero .tagline {
-    font-size: 1.2rem; max-width: 560px; margin: 1rem auto 0;
-    opacity: 0.92; line-height: 1.5;
+  header h1 {
+    font-family: var(--serif); font-weight: 400;
+    font-size: 3.2rem; line-height: 1.15;
+    letter-spacing: -0.02em; margin-bottom: 1.25rem;
   }
-  .hero .pills {
+  header h1 em {
+    font-style: italic;
+    background: var(--accent-light);
+    padding: 0 0.15em;
+    border-radius: 3px;
+  }
+  header .lead {
+    font-size: 1.05rem; color: var(--muted);
+    max-width: 540px; line-height: 1.7;
+  }
+  .pills {
     display: flex; flex-wrap: wrap; gap: 0.5rem;
-    justify-content: center; margin-top: 2rem;
+    margin-top: 2rem;
   }
-  .hero .pill {
-    background: rgba(255,255,255,0.18); backdrop-filter: blur(4px);
-    border: 1px solid rgba(255,255,255,0.25);
-    padding: 0.4rem 1rem; border-radius: 99px;
-    font-size: 0.85rem; font-weight: 500;
+  .pill {
+    border: 1px solid var(--border); background: var(--surface);
+    padding: 0.35rem 0.9rem; border-radius: 99px;
+    font-size: 0.8rem; font-weight: 500; color: var(--text);
+    cursor: default;
+  }
+  .pill::after { content: ' \203A'; color: var(--muted); margin-left: 0.15em; }
+
+  /* Divider */
+  hr.sep {
+    border: none; height: 1px; background: var(--border);
+    max-width: 720px; margin: 0 auto;
   }
 
-  /* Layout */
-  .container { max-width: 740px; margin: 0 auto; padding: 0 1.5rem; }
+  /* Sections */
+  .container { max-width: 720px; margin: 0 auto; padding: 0 2rem; }
   section { padding: 3.5rem 0; }
-  section + section { border-top: 1px solid var(--border); }
 
+  .section-head {
+    display: flex; align-items: baseline; gap: 1rem;
+    margin-bottom: 1.25rem;
+  }
+  .section-num {
+    font-family: var(--serif); font-size: 1rem;
+    color: var(--accent); font-style: italic;
+    flex-shrink: 0;
+  }
   h2 {
-    font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em;
-    margin-bottom: 1rem;
+    font-family: var(--serif); font-weight: 400;
+    font-size: 1.75rem; letter-spacing: -0.01em;
   }
   h3 {
-    font-size: 1.1rem; font-weight: 600; margin: 2rem 0 0.5rem;
+    font-family: var(--sans); font-weight: 600;
+    font-size: 0.95rem; margin: 2rem 0 0.5rem;
   }
-  p { margin-bottom: 1rem; color: var(--text); }
-  p.muted { color: var(--muted); font-size: 0.92rem; }
+  p { margin-bottom: 1rem; font-size: 0.95rem; }
+  p.muted { color: var(--muted); font-size: 0.88rem; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  em { font-family: var(--serif); font-style: italic; }
 
-  /* Code blocks */
+  /* Code */
   pre {
     background: var(--code-bg); color: var(--code-fg);
-    padding: 1.25rem 1.5rem; border-radius: 10px;
-    overflow-x: auto; font-size: 0.85rem; line-height: 1.65;
-    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-    margin: 0.75rem 0 1.25rem;
-    box-shadow: var(--card-shadow);
+    padding: 1.25rem 1.5rem; border-radius: 8px;
+    overflow-x: auto; font-size: 0.82rem; line-height: 1.7;
+    font-family: var(--mono); margin: 0.75rem 0 1.25rem;
   }
   pre .prompt { color: var(--code-prompt); }
   pre .comment { color: var(--code-comment); }
   pre .string { color: var(--code-string); }
   code {
-    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-    font-size: 0.88em; background: #f1f5f9; padding: 0.15em 0.4em;
-    border-radius: 4px;
+    font-family: var(--mono); font-size: 0.85em;
+    background: rgba(0,0,0,0.05); padding: 0.15em 0.4em;
+    border-radius: 3px;
   }
   pre code { background: none; padding: 0; font-size: inherit; }
 
-  /* Steps */
-  .steps { counter-reset: step; }
-  .step {
-    display: flex; gap: 1.25rem; margin-bottom: 2rem;
-    align-items: flex-start;
-  }
-  .step-num {
-    counter-increment: step;
-    flex-shrink: 0; width: 2.2rem; height: 2.2rem;
-    background: linear-gradient(135deg, var(--accent), var(--accent2));
-    color: white; border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    font-weight: 700; font-size: 0.9rem;
-    margin-top: 0.1rem;
-  }
-  .step-num::after { content: counter(step); }
-  .step-body { flex: 1; min-width: 0; }
-  .step-body h3 { margin-top: 0; }
-
   /* Cards */
   .card-grid {
-    display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    display: grid; grid-template-columns: repeat(3, 1fr);
     gap: 0.75rem; margin: 1rem 0;
   }
   .card {
     background: var(--surface); border: 1px solid var(--border);
-    border-radius: 10px; padding: 1rem 1.15rem;
-    box-shadow: var(--card-shadow);
-    font-size: 0.9rem;
+    border-radius: 8px; padding: 1.15rem 1.25rem;
+    font-size: 0.88rem;
   }
-  .card strong { display: block; margin-bottom: 0.25rem; }
+  .card strong {
+    display: block; margin-bottom: 0.2rem;
+    font-size: 0.92rem;
+  }
+  .card span { color: var(--muted); font-size: 0.82rem; }
 
   /* Lists */
   ul, ol { margin: 0.5rem 0 1rem 1.25rem; }
-  li { margin-bottom: 0.35rem; font-size: 0.95rem; }
-  li code { font-size: 0.82rem; }
+  li { margin-bottom: 0.35rem; font-size: 0.92rem; }
+  li strong { font-weight: 600; }
 
   /* Callout */
   .callout {
-    background: #fef3c7; border-left: 3px solid #f59e0b;
-    padding: 0.75rem 1rem; border-radius: 0 8px 8px 0;
-    font-size: 0.9rem; margin: 1rem 0;
+    background: var(--surface); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    padding: 0.85rem 1.15rem; border-radius: 0 8px 8px 0;
+    font-size: 0.88rem; margin: 1rem 0;
+    color: var(--muted);
   }
 
   /* Footer */
   footer {
-    text-align: center; padding: 2.5rem 1rem;
-    color: var(--muted); font-size: 0.85rem;
+    text-align: center; padding: 3rem 1rem;
+    color: var(--muted); font-size: 0.82rem;
     border-top: 1px solid var(--border);
+    max-width: 720px; margin: 0 auto;
   }
-  footer a { color: var(--accent); text-decoration: none; }
-  footer a:hover { text-decoration: underline; }
 
-  @media (max-width: 600px) {
-    .hero { padding: 3rem 1.5rem 2.5rem; }
-    .hero h1 { font-size: 2rem; }
-    .hero .tagline { font-size: 1rem; }
-    .step { flex-direction: column; gap: 0.5rem; }
+  @media (max-width: 640px) {
+    header { padding: 3rem 1.5rem 2.5rem; }
+    header h1 { font-size: 2.2rem; }
+    .container { padding: 0 1.5rem; }
+    .card-grid { grid-template-columns: 1fr 1fr; }
+  }
+  @media (max-width: 420px) {
+    .card-grid { grid-template-columns: 1fr; }
   }
 </style>
 </head>
 <body>
 
-<div class="hero">
-  <h1>share-file</h1>
-  <p class="tagline">
-    Publish any file to a shareable URL backed by a secret GitHub gist.
-    Anyone with the link can view it.
+<header>
+  <div class="eyebrow">A single-file sharing tool</div>
+  <h1>Publish any file to a<br><em>shareable URL</em></h1>
+  <p class="lead">
+    Backed by a secret GitHub gist. Anyone with the link can view it through
+    a static viewer hosted on GitHub Pages &mdash; no new accounts, no backend,
+    no build step.
   </p>
   <div class="pills">
     <span class="pill">Uses existing GitHub auth</span>
     <span class="pill">Single bash script</span>
-    <span class="pill">Works from terminal or agent</span>
+    <span class="pill">Terminal or agent</span>
     <span class="pill">Updates reuse the same URL</span>
   </div>
-</div>
+</header>
+
+<hr class="sep">
 
 <div class="container">
 
 <section>
-  <h2>Get started</h2>
-  <div class="steps">
-    <div class="step">
-      <div class="step-num"></div>
-      <div class="step-body">
-        <h3>Install</h3>
+  <div class="section-head">
+    <span class="section-num">01</span>
+    <h2>Install</h2>
+  </div>
 <pre><code>mkdir -p ~/.local/bin &amp;&amp; \
   curl -fsSL https://raw.githubusercontent.com/alecgard/share-file/main/bin/share-file \
     -o ~/.local/bin/share-file &amp;&amp; \
   chmod +x ~/.local/bin/share-file</code></pre>
-      </div>
-    </div>
-    <div class="step">
-      <div class="step-num"></div>
-      <div class="step-body">
-        <h3>Share a file</h3>
+</section>
+
+<hr class="sep">
+
+<section>
+  <div class="section-head">
+    <span class="section-num">02</span>
+    <h2>Share a file</h2>
+  </div>
 <pre><code><span class="prompt">$</span> share-file dashboard.html
 <span class="comment">Source:   https://gist.github.com/you/abc123</span>
 <span class="comment">Rendered: https://alecgard.github.io/share-file/?abc123</span>
 <span class="string">(copied to clipboard)</span></code></pre>
-        <p class="muted">That rendered URL works for anyone you send it to.
-          Here's a <a href="https://alecgard.github.io/share-file/?64a8a8cd0fbf41caac9ba9fca7fc353c" style="color:var(--accent)">live example</a>.</p>
-      </div>
-    </div>
-  </div>
+  <p class="muted">That rendered URL works for anyone you send it to.
+    Here's a <a href="https://alecgard.github.io/share-file/?64a8a8cd0fbf41caac9ba9fca7fc353c">live example</a>.</p>
 </section>
 
+<hr class="sep">
+
 <section>
-  <h2>Use it from an agent</h2>
-  <p>Install the agent skill so <a href="https://claude.ai/code" style="color:var(--accent)">Claude Code</a>
+  <div class="section-head">
+    <span class="section-num">03</span>
+    <h2>Use it from an agent</h2>
+  </div>
+  <p>Install the agent skill so <a href="https://claude.ai/code">Claude Code</a>
     (or any agent that loads skills) can call <code>share-file</code> for you:</p>
 <pre><code>mkdir -p ~/.claude/skills/share-file &amp;&amp; \
   curl -fsSL https://raw.githubusercontent.com/alecgard/share-file/main/skill/SKILL.md \
@@ -218,8 +240,13 @@
     inside the repo instead.</p>
 </section>
 
+<hr class="sep">
+
 <section>
-  <h2>Common operations</h2>
+  <div class="section-head">
+    <span class="section-num">04</span>
+    <h2>Common operations</h2>
+  </div>
 
   <h3>Update an existing share</h3>
   <p class="muted">The URL stays the same.</p>
@@ -244,21 +271,31 @@
 <pre><code>share-file --public --desc <span class="string">"Q3 results"</span> dashboard.html</code></pre>
 </section>
 
+<hr class="sep">
+
 <section>
-  <h2>Supported file types</h2>
+  <div class="section-head">
+    <span class="section-num">05</span>
+    <h2>Supported file types</h2>
+  </div>
   <div class="card-grid">
-    <div class="card"><strong>HTML</strong>Sandboxed iframe</div>
-    <div class="card"><strong>Images</strong>PNG, JPG, GIF, SVG, WebP</div>
-    <div class="card"><strong>Documents</strong>PDF, Markdown, plain text</div>
-    <div class="card"><strong>Media</strong>Audio and video</div>
-    <div class="card"><strong>Code</strong>JSON, XML, source files</div>
-    <div class="card"><strong>Anything else</strong>Download link</div>
+    <div class="card"><strong>HTML</strong><span>Sandboxed iframe</span></div>
+    <div class="card"><strong>Images</strong><span>PNG, JPG, GIF, SVG, WebP</span></div>
+    <div class="card"><strong>Documents</strong><span>PDF, Markdown, plain text</span></div>
+    <div class="card"><strong>Media</strong><span>Audio and video</span></div>
+    <div class="card"><strong>Code</strong><span>JSON, XML, source files</span></div>
+    <div class="card"><strong>Anything else</strong><span>Download link</span></div>
   </div>
   <p class="muted">Size limit: 900 KB encoded payload (~675 KB raw for binaries).</p>
 </section>
 
+<hr class="sep">
+
 <section>
-  <h2>Self-host your own viewer</h2>
+  <div class="section-head">
+    <span class="section-num">06</span>
+    <h2>Self-host your own viewer</h2>
+  </div>
   <p>By default shares render through the public viewer at
     <code>alecgard.github.io/share-file/</code>. You might want your own for a
     dedicated rate-limit bucket, your own domain, or independence from the
@@ -278,8 +315,13 @@ cd share-file
   </ol>
 </section>
 
+<hr class="sep">
+
 <section>
-  <h2>Limits and caveats</h2>
+  <div class="section-head">
+    <span class="section-num">07</span>
+    <h2>Limits and caveats</h2>
+  </div>
   <div class="callout">
     Gist URLs are unguessable but not access-controlled. Don't share sensitive content.
   </div>
