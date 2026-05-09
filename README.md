@@ -108,8 +108,8 @@ Rendered: https://alecgard.github.io/share-file/?abc123#k=Woa-2A8tTA-P3KfHS6ohUA
 ```
 
 - AES-128-CBC, authenticated with HMAC-SHA256. Filename and MIME type are also inside the encrypted blob.
-- The full URL is the secret. Anyone with it gets in; lose it and the content is unrecoverable.
-- `--update` re-encrypts with the same key (URL stays stable). Keys are cached at `~/.config/share-file/keys/<gist_id>` (chmod 600). To update from a machine without the cache, pass the full rendered URL: `share-file --encrypt --update "https://.../?<id>#k=<key>" file`.
+- The full URL is the secret. Anyone with it gets in; lose it and the content is unrecoverable — no copy is kept anywhere.
+- To update an encrypted share, pass the full rendered URL so the same key can be reused (URL stays stable): `share-file --encrypt --update "https://.../?<id>#k=<key>" file`.
 - Not compatible with `--public`; `--desc` is ignored (gist description is server-visible).
 
 ## Supported file types

@@ -10,7 +10,6 @@ if [[ -z "$VIEWER_BASE" ]] && [[ -f "$HOME/.config/share-file/viewer" ]]; then
 fi
 VIEWER_BASE="${VIEWER_BASE:-https://alecgard.github.io/share-file/}"
 SIZE_LIMIT=900000  # ~900KB; gist API gets unreliable above 1MB
-KEY_CACHE_DIR="$HOME/.config/share-file/keys"
 
 usage() {
   cat <<EOF >&2
@@ -25,9 +24,9 @@ Flags:
   --desc <text>       Gist description (default: "Shared file")
   --public            Create a public (listed) gist instead of secret
   --encrypt           Encrypt content client-side; key goes in URL fragment
-  --update <id|url>   Update an existing gist (accepts a bare ID, or a full
-                      rendered URL — needed to update encrypted shares from
-                      a machine that doesn't have the key cached)
+  --update <id|url>   Update an existing gist. Pass the bare gist ID for
+                      plain shares, or the full rendered URL (with #k=...)
+                      for encrypted ones — the key lives only in the URL.
   --stdin             Read content from stdin (requires --filename)
   --filename <name>   Filename to use (overrides basename / required with --stdin)
   --mime <type>       Override MIME type detection
@@ -202,18 +201,14 @@ esac
 master_key_b64url=""
 if $encrypt; then
   # For encrypted updates, reuse the original key so the URL stays stable.
-  # Key sources: --update <full-url-with-fragment>, or local cache.
+  # The key lives only in the rendered URL fragment, so --update needs the URL.
   existing_key=""
   if [[ -n "$update_id" ]]; then
     if [[ -n "$update_key_from_url" ]]; then
       existing_key="$update_key_from_url"
-    elif [[ -f "$KEY_CACHE_DIR/$update_id" ]]; then
-      existing_key=$(cat "$KEY_CACHE_DIR/$update_id")
     else
-      echo "error: no decryption key available for gist $update_id" >&2
-      echo "  pass the full rendered URL to --update (it has the key in #k=...)," >&2
-      echo "  or run from the machine that created the share (key is cached at" >&2
-      echo "  $KEY_CACHE_DIR/$update_id)." >&2
+      echo "error: --encrypt --update needs the full rendered URL (with #k=...) so the key" >&2
+      echo "  can be reused. You passed a bare gist ID; pass the rendered URL instead." >&2
       exit 1
     fi
   fi
@@ -266,13 +261,6 @@ else
       files: ({} | .["_meta.json"] = {content: $meta} | .[$fn] = {content: $c})}')
   response=$(gh api -X POST gists --input - <<<"$body")
   gist_id=$(jq -r '.id' <<<"$response")
-fi
-
-if $encrypt; then
-  mkdir -p "$KEY_CACHE_DIR"
-  chmod 700 "$KEY_CACHE_DIR" 2>/dev/null || true
-  printf '%s' "$master_key_b64url" > "$KEY_CACHE_DIR/$gist_id"
-  chmod 600 "$KEY_CACHE_DIR/$gist_id"
 fi
 
 source_url=$(jq -r '.html_url' <<<"$response")
