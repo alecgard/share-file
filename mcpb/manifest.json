@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "share-file",
   "display_name": "share-file",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Publish a file to a shareable URL via GitHub gist.",
   "long_description": "Lets Claude share any single file — HTML pages, images, PDFs, screenshots, dashboards, audio, video, source code — by publishing it as a secret GitHub gist and returning a rendered viewer URL. Uses your existing `gh` CLI auth.\n\nOptional client-side encryption (`--encrypt`): the decryption key rides in the URL fragment, so GitHub stores only ciphertext.\n\nRequires `gh` and `jq` installed locally, and `gh auth login` completed.",
   "author": {

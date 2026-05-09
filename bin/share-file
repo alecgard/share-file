@@ -19,6 +19,7 @@ Usage:
   share-file [flags] <file>
   share-file [flags] --stdin --filename <name>
   share-file [flags] --update <gist-id|rendered-url> <file>
+  share-file --view <gist-id|rendered-url>
 
 Flags:
   --desc <text>       Gist description (default: "Shared file")
@@ -27,6 +28,9 @@ Flags:
   --update <id|url>   Update an existing gist. Pass the bare gist ID for
                       plain shares, or the full rendered URL (with #k=...)
                       for encrypted ones — the key lives only in the URL.
+  --view <id|url>     Fetch, decrypt locally, and open in the default browser
+                      via a data: URL (no third-party viewer involved). Pass
+                      the rendered URL for encrypted shares.
   --stdin             Read content from stdin (requires --filename)
   --filename <name>   Filename to use (overrides basename / required with --stdin)
   --mime <type>       Override MIME type detection
@@ -104,10 +108,65 @@ encrypt_payload() {
   printf '%s\n%s' "$master_b64url" "$payload_b64"
 }
 
+# Decrypt base64-encoded payload from stdin using master key $1 (base64url).
+# Outputs plaintext to stdout. Verifies HMAC before decrypting.
+decrypt_payload() {
+  local key_b64url="$1"
+  local d
+  d=$(reg_tmp "$(mktemp -d)")
+  openssl base64 -d -A > "$d/payload.bin"
+  b64url_decode_to "$key_b64url" "$d/master.bin"
+  [[ $(wc -c < "$d/master.bin") -eq 16 ]] || {
+    echo "error: invalid key length (expected 16 bytes)" >&2; return 1; }
+  local size=$(wc -c < "$d/payload.bin") iv_size=16 mac_size=32
+  local ct_size=$((size - iv_size - mac_size))
+  (( ct_size > 0 )) || { echo "error: encrypted payload too short" >&2; return 1; }
+  dd if="$d/payload.bin" of="$d/iv.bin"  bs=1 count=$iv_size                       2>/dev/null
+  dd if="$d/payload.bin" of="$d/ct.bin"  bs=1 skip=$iv_size count=$ct_size         2>/dev/null
+  dd if="$d/payload.bin" of="$d/mac.bin" bs=1 skip=$((iv_size + ct_size))          2>/dev/null
+  local enc_key_hex mac_key_hex iv_hex
+  enc_key_hex=$( { printf '\x01'; cat "$d/master.bin"; } | \
+    openssl dgst -sha256 -binary | head -c 16 | xxd -p -c 256)
+  mac_key_hex=$( { printf '\x02'; cat "$d/master.bin"; } | \
+    openssl dgst -sha256 -binary | xxd -p -c 256)
+  iv_hex=$(xxd -p -c 256 < "$d/iv.bin")
+  local expected actual
+  expected=$(cat "$d/iv.bin" "$d/ct.bin" | \
+    openssl dgst -sha256 -mac HMAC -macopt "hexkey:$mac_key_hex" -binary | xxd -p -c 256)
+  actual=$(xxd -p -c 256 < "$d/mac.bin")
+  if [[ "$expected" != "$actual" ]]; then
+    echo "error: HMAC verification failed (wrong key or tampered data)" >&2
+    return 1
+  fi
+  openssl enc -d -aes-128-cbc -K "$enc_key_hex" -iv "$iv_hex" -in "$d/ct.bin"
+}
+
+# Parse --update/--view target as either bare gist ID or full rendered URL.
+# Sets $parsed_id and $parsed_key (key empty if not in fragment).
+parse_target() {
+  local t="$1"
+  parsed_id="$t"
+  parsed_key=""
+  [[ "$t" == *"?"* ]] || return 0
+  local rest="${t#*\?}"
+  if [[ "$rest" == *"#"* ]]; then
+    parsed_id="${rest%%#*}"
+    local frag="${rest#*#}"
+    case "$frag" in
+      k=*)  parsed_key="${frag#k=}";   parsed_key="${parsed_key%%&*}" ;;
+      *k=*) parsed_key="${frag##*k=}"; parsed_key="${parsed_key%%&*}" ;;
+    esac
+  else
+    parsed_id="$rest"
+  fi
+  parsed_id="${parsed_id%%&*}"
+}
+
 desc="Shared file"
 public=false
 encrypt=false
 update_id=""
+view_target=""
 use_stdin=false
 output_json=false
 file=""
@@ -120,6 +179,7 @@ while [[ $# -gt 0 ]]; do
     --public)   public=true; shift ;;
     --encrypt)  encrypt=true; shift ;;
     --update)   update_id="$2"; shift 2 ;;
+    --view)     view_target="$2"; shift 2 ;;
     --stdin)    use_stdin=true; shift ;;
     --filename) filename_override="$2"; shift 2 ;;
     --mime)     mime_override="$2"; shift 2 ;;
@@ -135,33 +195,87 @@ if $encrypt && $public; then
   exit 1
 fi
 
-# --update accepts either a bare gist ID or a full rendered URL like
-# "https://.../?<gist_id>#k=<key>". When given a URL, extract both.
-update_key_from_url=""
-if [[ "$update_id" == *"?"* ]]; then
-  rest="${update_id#*\?}"
-  if [[ "$rest" == *"#"* ]]; then
-    gist_part="${rest%%#*}"
-    frag_part="${rest#*#}"
-    case "$frag_part" in
-      k=*) update_key_from_url="${frag_part#k=}"; update_key_from_url="${update_key_from_url%%&*}" ;;
-      *k=*) update_key_from_url="${frag_part##*k=}"; update_key_from_url="${update_key_from_url%%&*}" ;;
-    esac
-  else
-    gist_part="$rest"
+if [[ -n "$view_target" ]]; then
+  if $encrypt || $public || [[ -n "$update_id" ]] || $use_stdin || \
+     [[ -n "$file" ]] || [[ -n "$filename_override" ]] || [[ -n "$mime_override" ]]; then
+    echo "error: --view doesn't combine with the upload-mode flags" >&2
+    exit 1
   fi
-  update_id="${gist_part%%&*}"
+fi
+
+# Parse --update target (bare gist ID or rendered URL with #k=...).
+update_key_from_url=""
+if [[ -n "$update_id" ]]; then
+  parse_target "$update_id"
+  update_id="$parsed_id"
+  update_key_from_url="$parsed_key"
 fi
 
 command -v gh   >/dev/null || { echo "error: gh not installed (https://cli.github.com)" >&2; exit 1; }
 command -v jq   >/dev/null || { echo "error: jq not installed" >&2; exit 1; }
 command -v file >/dev/null || { echo "error: file(1) not installed" >&2; exit 1; }
 command -v base64 >/dev/null || { echo "error: base64 not installed" >&2; exit 1; }
-if $encrypt; then
-  command -v openssl >/dev/null || { echo "error: openssl not installed (required for --encrypt)" >&2; exit 1; }
-  command -v xxd     >/dev/null || { echo "error: xxd not installed (required for --encrypt)" >&2; exit 1; }
+if $encrypt || [[ -n "$view_target" ]]; then
+  command -v openssl >/dev/null || { echo "error: openssl not installed" >&2; exit 1; }
+  command -v xxd     >/dev/null || { echo "error: xxd not installed" >&2; exit 1; }
 fi
 gh auth status >/dev/null 2>&1 || { echo "error: not logged in. run: gh auth login" >&2; exit 1; }
+
+if [[ -n "$view_target" ]]; then
+  parse_target "$view_target"
+  view_id="$parsed_id"
+  view_key="$parsed_key"
+
+  response=$(gh api "gists/$view_id") || {
+    echo "error: failed to fetch gist $view_id" >&2; exit 1; }
+
+  meta_content=$(jq -r '.files["_meta.json"].content // empty' <<<"$response")
+  if [[ -z "$meta_content" ]]; then
+    # Old-style gist with no _meta.json: fall back to first file
+    filename=$(jq -r '.files | to_entries[0].key' <<<"$response")
+    mime_type=$(jq -r --arg fn "$filename" '.files[$fn].type // "text/plain"' <<<"$response")
+    encoding="raw"
+    content=$(jq -r --arg fn "$filename" '.files[$fn].content' <<<"$response")
+  else
+    encrypted_flag=$(jq -r '.encrypted // false' <<<"$meta_content")
+    if [[ "$encrypted_flag" == "true" ]]; then
+      [[ -n "$view_key" ]] || {
+        echo "error: this share is encrypted; pass the full rendered URL with #k=..." >&2
+        exit 1; }
+      payload_b64=$(jq -r '.files["payload.b64"].content' <<<"$response")
+      inner_json=$(printf '%s' "$payload_b64" | decrypt_payload "$view_key") || exit 1
+      filename=$(jq -r '.filename' <<<"$inner_json")
+      mime_type=$(jq -r '.mime_type' <<<"$inner_json")
+      encoding=$(jq -r '.encoding' <<<"$inner_json")
+      content=$(jq -r '.content' <<<"$inner_json")
+    else
+      filename=$(jq -r '.filename' <<<"$meta_content")
+      mime_type=$(jq -r '.mime_type' <<<"$meta_content")
+      encoding=$(jq -r '.encoding' <<<"$meta_content")
+      content=$(jq -r --arg fn "$filename" '.files[$fn].content' <<<"$response")
+    fi
+  fi
+
+  # Build data: URL — base64-encode the content (re-using existing base64 if already encoded).
+  if [[ "$encoding" == "base64" ]]; then
+    content_b64=$(printf '%s' "$content" | tr -d '[:space:]')
+  else
+    content_b64=$(printf '%s' "$content" | openssl base64 -A)
+  fi
+  data_url="data:${mime_type};base64,${content_b64}"
+
+  if command -v open >/dev/null 2>&1; then
+    open "$data_url"
+  elif command -v xdg-open >/dev/null 2>&1; then
+    xdg-open "$data_url"
+  elif command -v wslview >/dev/null 2>&1; then
+    wslview "$data_url"
+  else
+    printf '%s\n' "$data_url"
+    echo "(no browser opener found; URL printed above — paste into address bar)" >&2
+  fi
+  exit 0
+fi
 
 if $use_stdin; then
   [[ -n "$filename_override" ]] || { echo "error: --stdin requires --filename" >&2; exit 1; }

@@ -112,6 +112,14 @@ Rendered: https://alecgard.github.io/share-file/?abc123#k=Woa-2A8tTA-P3KfHS6ohUA
 - To update an encrypted share, pass the full rendered URL so the same key can be reused (URL stays stable): `share-file --encrypt --update "https://.../?<id>#k=<key>" file`.
 - Not compatible with `--public`; `--desc` is ignored (gist description is server-visible).
 
+### View locally without the viewer
+
+```bash
+share-file --view "https://alecgard.github.io/share-file/?abc123#k=Woa-2A8tTA-P3KfHS6ohUA"
+```
+
+Fetches, decrypts locally, and opens the result in your default browser as a `data:` URL — no viewer involved, no third-party JS sees the content. Works for plain shares too (just pass the gist ID). Markdown opens as plain text since there's no in-browser renderer.
+
 ## Supported file types
 
 Renders inline in the viewer:

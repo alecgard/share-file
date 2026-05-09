@@ -66,6 +66,10 @@ share-file --json --encrypt /path/to/file.html
 
 Returns the same JSON shape with `"encrypted": true` and `rendered_url` containing the decryption key as a URL fragment (`#k=...`). The full URL is the secret — anyone with it can decrypt; lose it and content is unrecoverable. To update an encrypted share, pass the full rendered URL to `--update` (the key in the fragment is reused so the URL stays stable). Not compatible with `--public`; `--desc` is ignored under `--encrypt`.
 
+## Viewing a share locally
+
+`share-file --view <gist-id|rendered-url>` fetches the gist, decrypts locally if encrypted, builds a `data:` URL with the decoded content, and opens it in the user's default browser. Skips the third-party viewer entirely. Use when the user wants to preview a share or inspect content without involving the public viewer.
+
 ## After publishing
 
 Report the `rendered_url` to the user as the share link. Mention `source_url`
