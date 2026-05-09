@@ -1,0 +1,44 @@
+{
+  "manifest_version": "0.3",
+  "name": "share-file",
+  "display_name": "share-file",
+  "version": "1.0.0",
+  "description": "Publish a file to a shareable URL via GitHub gist.",
+  "long_description": "Lets Claude share any single file — HTML pages, images, PDFs, screenshots, dashboards, audio, video, source code — by publishing it as a secret GitHub gist and returning a rendered viewer URL. Uses your existing `gh` CLI auth.\n\nRequires `gh` and `jq` installed locally, and `gh auth login` completed.",
+  "author": {
+    "name": "Alec Gard",
+    "url": "https://github.com/alecgard/share-file"
+  },
+  "homepage": "https://github.com/alecgard/share-file",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/alecgard/share-file"
+  },
+  "license": "MIT",
+  "keywords": ["share", "gist", "github", "publish", "url"],
+  "server": {
+    "type": "node",
+    "entry_point": "server/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/server/index.js"]
+    }
+  },
+  "tools": [
+    {
+      "name": "share_file",
+      "description": "Publish a file from disk to a shareable URL via secret GitHub gist."
+    },
+    {
+      "name": "share_content",
+      "description": "Publish inline content (string) to a shareable URL via secret GitHub gist."
+    }
+  ],
+  "tools_generated": false,
+  "compatibility": {
+    "platforms": ["darwin", "linux"],
+    "runtimes": {
+      "node": ">=18.0.0"
+    }
+  }
+}

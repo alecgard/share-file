@@ -1,0 +1,4 @@
+mcpb/build/
+mcpb/server/node_modules/
+mcpb/server/package-lock.json
+dist/

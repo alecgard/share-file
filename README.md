@@ -33,6 +33,8 @@ That rendered URL works for anyone you send it to. Here's a
 
 ## Use it from an agent
 
+### Claude Code
+
 Install the agent skill so [Claude Code](https://claude.ai/code) (or any agent
 that loads skills) can call `share-file` for you:
 
@@ -46,6 +48,18 @@ Then ask the agent things like "share this dashboard with my team" or "give me a
 that screenshot" — it'll call `share-file --json` and reply with the rendered
 URL. For project-scoped install, drop it in `.claude/skills/share-file/`
 inside the repo instead.
+
+### Claude Desktop
+
+Download and drop the extension into Claude Desktop:
+
+
+Download [**share-file.mcpb**](https://github.com/alecgard/share-file/releases/latest/download/share-file.mcpb)
+and double-click it — Claude Desktop handles the install. (On Linux, drag it
+into **Settings → Extensions**.)
+
+Then ask Claude "share this PDF" or "give me a link to the chart you just made"
+and the rendered URL comes back inline.
 
 ## Common operations
 

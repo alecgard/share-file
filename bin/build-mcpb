@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# build-mcpb: assemble and pack the share-file Claude Desktop extension
+#
+# Output: dist/share-file.mcpb (a ZIP archive Claude Desktop can install)
+#
+# Requires: node, npm. Uses `npx -y @anthropic-ai/mcpb` for packing — no global install needed.
+
+set -euo pipefail
+
+repo_root=$(cd "$(dirname "$0")/.." && pwd)
+src="$repo_root/mcpb"
+build="$repo_root/mcpb/build"
+dist="$repo_root/dist"
+
+command -v node >/dev/null || { echo "error: node is required" >&2; exit 1; }
+command -v npm  >/dev/null || { echo "error: npm is required" >&2; exit 1; }
+
+echo "==> installing server deps"
+npm --prefix "$src/server" install --omit=dev --silent
+
+echo "==> staging bundle"
+rm -rf "$build"
+mkdir -p "$build/server" "$build/bin"
+cp "$src/manifest.json"          "$build/manifest.json"
+cp "$src/server/index.js"        "$build/server/index.js"
+cp "$src/server/package.json"    "$build/server/package.json"
+cp -R "$src/server/node_modules" "$build/server/node_modules"
+cp "$repo_root/bin/share-file"   "$build/bin/share-file"
+chmod +x "$build/bin/share-file"
+
+mkdir -p "$dist"
+out="$dist/share-file.mcpb"
+
+echo "==> packing $out"
+# Pack via the official tool — validates the manifest and produces a .mcpb.
+# Falls back to plain zip if the npm package is unreachable.
+if npx -y @anthropic-ai/mcpb pack "$build" "$out" 2>/dev/null; then
+  :
+else
+  echo "    (npx mcpb unavailable, falling back to zip)" >&2
+  rm -f "$out"
+  (cd "$build" && zip -qr "$out" .)
+fi
+
+echo "==> built $out ($(du -h "$out" | cut -f1))"
