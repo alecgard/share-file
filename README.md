@@ -126,6 +126,17 @@ For scripts and agents, `--read` returns the decoded content as JSON (`{filename
 share-file --read "https://alecgard.github.io/share-file/?abc123#k=..."
 ```
 
+### List your shares
+
+```bash
+$ share-file --created
+2026-05-09  encrypted  https://alecgard.github.io/share-file/?abc123#k=Woa-2A8tTA-P3KfHS6ohUA
+2026-05-09  plain      https://alecgard.github.io/share-file/?def456
+2026-05-08  encrypted  https://alecgard.github.io/share-file/?ghi789  (key not on this machine)
+```
+
+Lists every share-file gist on your account. Encrypted ones include the decryption key when share-file has seen it on this machine — keys are cached at `~/.config/share-file/keys/<gist_id>` whenever you create, update, view, or read an encrypted share. `--created --json` for machine-readable output.
+
 ## Supported file types
 
 Renders inline in the viewer:

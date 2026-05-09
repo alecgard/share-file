@@ -10,6 +10,18 @@ if [[ -z "$VIEWER_BASE" ]] && [[ -f "$HOME/.config/share-file/viewer" ]]; then
 fi
 VIEWER_BASE="${VIEWER_BASE:-https://alecgard.github.io/share-file/}"
 SIZE_LIMIT=900000  # ~900KB; gist API gets unreliable above 1MB
+KEY_CACHE_DIR="$HOME/.config/share-file/keys"
+
+# Stash an encrypted share's key locally so `share-file --created` can rebuild the URL.
+# Cached on every encrypted create/update/view/read.
+cache_key() {
+  local gist_id="$1" key="$2"
+  [[ -n "$gist_id" && -n "$key" ]] || return 0
+  mkdir -p "$KEY_CACHE_DIR"
+  chmod 700 "$KEY_CACHE_DIR" 2>/dev/null || true
+  printf '%s' "$key" > "$KEY_CACHE_DIR/$gist_id"
+  chmod 600 "$KEY_CACHE_DIR/$gist_id"
+}
 
 usage() {
   cat <<EOF >&2
@@ -21,6 +33,7 @@ Usage:
   share-file [flags] --update <gist-id|rendered-url> <file>
   share-file --view <gist-id|rendered-url>
   share-file --read <gist-id|rendered-url>
+  share-file --created [--json]
 
 Flags:
   --desc <text>       Gist description (default: "Shared file")
@@ -35,6 +48,9 @@ Flags:
   --read <id|url>     Like --view but emit the decoded content as JSON to
                       stdout instead of opening a browser. Useful for agents
                       and scripts that need the content rather than a preview.
+  --created           List every share-file gist on your account, one per line:
+                      timestamp, type (plain/encrypted), and rendered URL with
+                      decryption key when known. --created --json for JSON.
   --stdin             Read content from stdin (requires --filename)
   --filename <name>   Filename to use (overrides basename / required with --stdin)
   --mime <type>       Override MIME type detection
@@ -172,6 +188,7 @@ encrypt=false
 update_id=""
 view_target=""
 read_target=""
+list_created=false
 use_stdin=false
 output_json=false
 file=""
@@ -186,6 +203,7 @@ while [[ $# -gt 0 ]]; do
     --update)   update_id="$2"; shift 2 ;;
     --view)     view_target="$2"; shift 2 ;;
     --read)     read_target="$2"; shift 2 ;;
+    --created)  list_created=true; shift ;;
     --stdin)    use_stdin=true; shift ;;
     --filename) filename_override="$2"; shift 2 ;;
     --mime)     mime_override="$2"; shift 2 ;;
@@ -210,6 +228,14 @@ if [[ -n "$fetch_target" ]]; then
   if $encrypt || $public || [[ -n "$update_id" ]] || $use_stdin || \
      [[ -n "$file" ]] || [[ -n "$filename_override" ]] || [[ -n "$mime_override" ]]; then
     echo "error: --view/--read doesn't combine with the upload-mode flags" >&2
+    exit 1
+  fi
+fi
+if $list_created; then
+  if $encrypt || $public || [[ -n "$update_id" ]] || [[ -n "$fetch_target" ]] || \
+     $use_stdin || [[ -n "$file" ]] || [[ -n "$filename_override" ]] || \
+     [[ -n "$mime_override" ]]; then
+    echo "error: --created only takes --json" >&2
     exit 1
   fi
 fi
@@ -259,6 +285,7 @@ if [[ -n "$fetch_target" ]]; then
       mime_type=$(jq -r '.mime_type' <<<"$inner_json")
       encoding=$(jq -r '.encoding' <<<"$inner_json")
       content=$(jq -r '.content' <<<"$inner_json")
+      cache_key "$fetch_id" "$fetch_key"
     else
       filename=$(jq -r '.filename' <<<"$meta_content")
       mime_type=$(jq -r '.mime_type' <<<"$meta_content")
@@ -290,6 +317,75 @@ if [[ -n "$fetch_target" ]]; then
   else
     printf '%s\n' "$data_url"
     echo "(no browser opener found; URL printed above — paste into address bar)" >&2
+  fi
+  exit 0
+fi
+
+if $list_created; then
+  # All share-file gists, joined with the local key cache so encrypted rows
+  # show their full rendered URL when the key is available. Filter on the
+  # presence of _meta.json (the structural marker; the [ShareFile] description
+  # prefix was added later and isn't on older gists).
+  raw_gists=$(gh api 'gists?per_page=100' --paginate)
+
+  # The list API returns file metadata only (no content), so detect encrypted
+  # via payload.b64's presence.
+  rows=$(jq -r '
+    [ .[]
+      | select(.files | has("_meta.json"))
+      | { id: .id,
+          updated: .updated_at,
+          desc: ((.description // "") | sub("^\\[ShareFile\\] *"; "")),
+          encrypted: (.files | has("payload.b64")),
+        }
+    ] | sort_by(.updated) | reverse | .[]
+    | [.id, .updated, .desc, (if .encrypted then "1" else "0" end)] | @tsv
+  ' <<<"$raw_gists")
+
+  if $output_json; then
+    json_rows=()
+    while IFS=$'\t' read -r id updated desc enc_flag; do
+      [[ -z "$id" ]] && continue
+      url="${VIEWER_BASE}?${id}"
+      key=""
+      if [[ "$enc_flag" == "1" ]] && [[ -f "$KEY_CACHE_DIR/$id" ]]; then
+        key=$(cat "$KEY_CACHE_DIR/$id")
+        url="${url}#k=${key}"
+      fi
+      json_rows+=("$(jq -n --arg id "$id" --arg url "$url" --arg updated "$updated" \
+        --arg desc "$desc" --argjson encrypted "$([[ "$enc_flag" == "1" ]] && echo true || echo false)" \
+        --argjson key_available "$([[ -n "$key" ]] && echo true || echo false)" \
+        '{gist_id: $id, rendered_url: $url, updated_at: $updated,
+          description: $desc, encrypted: $encrypted, key_available: $key_available}')")
+    done <<<"$rows"
+    if [[ ${#json_rows[@]} -eq 0 ]]; then
+      echo "[]"
+    else
+      printf '%s\n' "${json_rows[@]}" | jq -s '.'
+    fi
+  else
+    printed=0
+    while IFS=$'\t' read -r id updated desc enc_flag; do
+      [[ -z "$id" ]] && continue
+      printed=$((printed + 1))
+      date_only="${updated%%T*}"
+      url="${VIEWER_BASE}?${id}"
+      tag="plain    "
+      suffix=""
+      if [[ "$enc_flag" == "1" ]]; then
+        tag="encrypted"
+        if [[ -f "$KEY_CACHE_DIR/$id" ]]; then
+          key=$(cat "$KEY_CACHE_DIR/$id")
+          url="${url}#k=${key}"
+        else
+          suffix="  (key not on this machine)"
+        fi
+      fi
+      printf '%s  %s  %s%s\n' "$date_only" "$tag" "$url" "$suffix"
+    done <<<"$rows"
+    if (( printed == 0 )); then
+      echo "(no share-file gists found)" >&2
+    fi
   fi
   exit 0
 fi
@@ -398,6 +494,7 @@ source_url=$(jq -r '.html_url' <<<"$response")
 rendered_url="${VIEWER_BASE}?${gist_id}"
 if $encrypt; then
   rendered_url="${rendered_url}#k=${master_key_b64url}"
+  cache_key "$gist_id" "$master_key_b64url"
 fi
 
 if $output_json; then

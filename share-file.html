@@ -291,6 +291,12 @@
   <h3>View a share locally (no viewer)</h3>
   <p class="muted">Decrypts locally and opens the content in your default browser via a <code>data:</code> URL. No third-party viewer involved.</p>
 <pre><code>share-file --view <span class="string">"https://alecgard.github.io/share-file/?abc123#k=Woa-..."</span></code></pre>
+
+  <h3>List your shares</h3>
+  <p class="muted">Encrypted ones include the key when share-file has seen it on this machine.</p>
+<pre><code><span class="prompt">$</span> share-file --created
+<span class="comment">2026-05-09  encrypted  https://alecgard.github.io/share-file/?abc123#k=Woa-...</span>
+<span class="comment">2026-05-09  plain      https://alecgard.github.io/share-file/?def456</span></code></pre>
 </section>
 
 <hr class="sep">

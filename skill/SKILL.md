@@ -72,6 +72,10 @@ Returns the same JSON shape with `"encrypted": true` and `rendered_url` containi
 
 `share-file --read <gist-id|rendered-url>` does the same fetch+decrypt but emits JSON to stdout (`{filename, mime_type, encoding, content}`) instead of opening a browser. Use when you need to read, summarize, or transform the contents of a share — no browser side effect.
 
+## Listing the user's shares
+
+`share-file --created` lists every share-file gist on the user's GitHub account. Encrypted shares include the decryption key in the URL when share-file has cached it locally (cached on every encrypted create/update/view/read). `--created --json` for parseable output. Use when the user asks "what have I shared?" or wants to revisit a past share.
+
 ## After publishing
 
 Report the `rendered_url` to the user as the share link. Mention `source_url`
