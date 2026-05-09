@@ -154,5 +154,39 @@ server.registerTool(
     ),
 );
 
+const TARGET_DESC =
+  "Either a bare gist ID (for plain shares) or the full rendered URL with " +
+  "the #k=... fragment (required for encrypted shares — the key lives only in the URL).";
+
+server.registerTool(
+  "read_share",
+  {
+    description:
+      "Fetch a share-file gist, decrypt it locally if encrypted, and return the decoded " +
+      "content as JSON: {filename, mime_type, encoding, content}. For binary files, " +
+      "encoding is 'base64' and content is the base64 string. Use this when the user wants " +
+      "you to read, summarize, or transform the contents of a share — no browser involved.",
+    inputSchema: {
+      target: z.string().describe(TARGET_DESC),
+    },
+  },
+  async (args) => toolResult(await runScript(["--read", args.target])),
+);
+
+server.registerTool(
+  "view_share",
+  {
+    description:
+      "Fetch a share-file gist, decrypt it locally if encrypted, and open the decoded " +
+      "content in the user's default browser via a data: URL. No third-party viewer is " +
+      "involved. Side effect: opens a browser tab on the user's machine — only use when " +
+      "the user explicitly asks to preview or open a share.",
+    inputSchema: {
+      target: z.string().describe(TARGET_DESC),
+    },
+  },
+  async (args) => toolResult(await runScript(["--view", args.target])),
+);
+
 const transport = new StdioServerTransport();
 await server.connect(transport);

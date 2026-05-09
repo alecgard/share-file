@@ -20,6 +20,7 @@ Usage:
   share-file [flags] --stdin --filename <name>
   share-file [flags] --update <gist-id|rendered-url> <file>
   share-file --view <gist-id|rendered-url>
+  share-file --read <gist-id|rendered-url>
 
 Flags:
   --desc <text>       Gist description (default: "Shared file")
@@ -31,6 +32,9 @@ Flags:
   --view <id|url>     Fetch, decrypt locally, and open in the default browser
                       via a data: URL (no third-party viewer involved). Pass
                       the rendered URL for encrypted shares.
+  --read <id|url>     Like --view but emit the decoded content as JSON to
+                      stdout instead of opening a browser. Useful for agents
+                      and scripts that need the content rather than a preview.
   --stdin             Read content from stdin (requires --filename)
   --filename <name>   Filename to use (overrides basename / required with --stdin)
   --mime <type>       Override MIME type detection
@@ -167,6 +171,7 @@ public=false
 encrypt=false
 update_id=""
 view_target=""
+read_target=""
 use_stdin=false
 output_json=false
 file=""
@@ -180,6 +185,7 @@ while [[ $# -gt 0 ]]; do
     --encrypt)  encrypt=true; shift ;;
     --update)   update_id="$2"; shift 2 ;;
     --view)     view_target="$2"; shift 2 ;;
+    --read)     read_target="$2"; shift 2 ;;
     --stdin)    use_stdin=true; shift ;;
     --filename) filename_override="$2"; shift 2 ;;
     --mime)     mime_override="$2"; shift 2 ;;
@@ -195,10 +201,15 @@ if $encrypt && $public; then
   exit 1
 fi
 
-if [[ -n "$view_target" ]]; then
+if [[ -n "$view_target" && -n "$read_target" ]]; then
+  echo "error: --view and --read are mutually exclusive" >&2
+  exit 1
+fi
+fetch_target="${view_target:-$read_target}"
+if [[ -n "$fetch_target" ]]; then
   if $encrypt || $public || [[ -n "$update_id" ]] || $use_stdin || \
      [[ -n "$file" ]] || [[ -n "$filename_override" ]] || [[ -n "$mime_override" ]]; then
-    echo "error: --view doesn't combine with the upload-mode flags" >&2
+    echo "error: --view/--read doesn't combine with the upload-mode flags" >&2
     exit 1
   fi
 fi
@@ -215,19 +226,19 @@ command -v gh   >/dev/null || { echo "error: gh not installed (https://cli.githu
 command -v jq   >/dev/null || { echo "error: jq not installed" >&2; exit 1; }
 command -v file >/dev/null || { echo "error: file(1) not installed" >&2; exit 1; }
 command -v base64 >/dev/null || { echo "error: base64 not installed" >&2; exit 1; }
-if $encrypt || [[ -n "$view_target" ]]; then
+if $encrypt || [[ -n "$fetch_target" ]]; then
   command -v openssl >/dev/null || { echo "error: openssl not installed" >&2; exit 1; }
   command -v xxd     >/dev/null || { echo "error: xxd not installed" >&2; exit 1; }
 fi
 gh auth status >/dev/null 2>&1 || { echo "error: not logged in. run: gh auth login" >&2; exit 1; }
 
-if [[ -n "$view_target" ]]; then
-  parse_target "$view_target"
-  view_id="$parsed_id"
-  view_key="$parsed_key"
+if [[ -n "$fetch_target" ]]; then
+  parse_target "$fetch_target"
+  fetch_id="$parsed_id"
+  fetch_key="$parsed_key"
 
-  response=$(gh api "gists/$view_id") || {
-    echo "error: failed to fetch gist $view_id" >&2; exit 1; }
+  response=$(gh api "gists/$fetch_id") || {
+    echo "error: failed to fetch gist $fetch_id" >&2; exit 1; }
 
   meta_content=$(jq -r '.files["_meta.json"].content // empty' <<<"$response")
   if [[ -z "$meta_content" ]]; then
@@ -239,11 +250,11 @@ if [[ -n "$view_target" ]]; then
   else
     encrypted_flag=$(jq -r '.encrypted // false' <<<"$meta_content")
     if [[ "$encrypted_flag" == "true" ]]; then
-      [[ -n "$view_key" ]] || {
+      [[ -n "$fetch_key" ]] || {
         echo "error: this share is encrypted; pass the full rendered URL with #k=..." >&2
         exit 1; }
       payload_b64=$(jq -r '.files["payload.b64"].content' <<<"$response")
-      inner_json=$(printf '%s' "$payload_b64" | decrypt_payload "$view_key") || exit 1
+      inner_json=$(printf '%s' "$payload_b64" | decrypt_payload "$fetch_key") || exit 1
       filename=$(jq -r '.filename' <<<"$inner_json")
       mime_type=$(jq -r '.mime_type' <<<"$inner_json")
       encoding=$(jq -r '.encoding' <<<"$inner_json")
@@ -256,7 +267,13 @@ if [[ -n "$view_target" ]]; then
     fi
   fi
 
-  # Build data: URL — base64-encode the content (re-using existing base64 if already encoded).
+  if [[ -n "$read_target" ]]; then
+    jq -n --arg fn "$filename" --arg mt "$mime_type" --arg enc "$encoding" --arg c "$content" \
+      '{filename: $fn, mime_type: $mt, encoding: $enc, content: $c}'
+    exit 0
+  fi
+
+  # --view: build data: URL and open in browser.
   if [[ "$encoding" == "base64" ]]; then
     content_b64=$(printf '%s' "$content" | tr -d '[:space:]')
   else
@@ -265,11 +282,11 @@ if [[ -n "$view_target" ]]; then
   data_url="data:${mime_type};base64,${content_b64}"
 
   if command -v open >/dev/null 2>&1; then
-    open "$data_url"
+    open "$data_url" && echo "Opened $filename in browser."
   elif command -v xdg-open >/dev/null 2>&1; then
-    xdg-open "$data_url"
+    xdg-open "$data_url" && echo "Opened $filename in browser."
   elif command -v wslview >/dev/null 2>&1; then
-    wslview "$data_url"
+    wslview "$data_url" && echo "Opened $filename in browser."
   else
     printf '%s\n' "$data_url"
     echo "(no browser opener found; URL printed above — paste into address bar)" >&2

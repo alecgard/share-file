@@ -120,6 +120,12 @@ share-file --view "https://alecgard.github.io/share-file/?abc123#k=Woa-2A8tTA-P3
 
 Fetches, decrypts locally, and opens the result in your default browser as a `data:` URL — no viewer involved, no third-party JS sees the content. Works for plain shares too (just pass the gist ID). Markdown opens as plain text since there's no in-browser renderer.
 
+For scripts and agents, `--read` returns the decoded content as JSON (`{filename, mime_type, encoding, content}`) instead of opening a browser:
+
+```bash
+share-file --read "https://alecgard.github.io/share-file/?abc123#k=..."
+```
+
 ## Supported file types
 
 Renders inline in the viewer:
