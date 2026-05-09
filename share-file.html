@@ -228,6 +228,7 @@
     <span class="section-num">03</span>
     <h2>Use it from an agent</h2>
   </div>
+  <h3>Claude Code</h3>
   <p>Install the agent skill so <a href="https://claude.ai/code">Claude Code</a>
     (or any agent that loads skills) can call <code>share-file</code> for you:</p>
 <pre><code>mkdir -p ~/.claude/skills/share-file &amp;&amp; \
@@ -238,6 +239,15 @@
     <code>share-file --json</code> and replies with the rendered URL.</p>
   <p class="muted">For project-scoped install, drop it in <code>.claude/skills/share-file/</code>
     inside the repo instead.</p>
+
+  <h3>Claude Desktop</h3>
+  <p>Download
+    <a href="https://github.com/alecgard/share-file/releases/latest/download/share-file.mcpb"><strong>share-file.mcpb</strong></a>
+    and double-click it &mdash; Claude Desktop handles the install. On Linux,
+    drag it into <strong>Settings &rarr; Extensions</strong>.</p>
+  <p>Then ask Claude <em>"share this PDF"</em> or
+    <em>"give me a link to the chart you just made"</em> and the rendered URL
+    comes back inline.</p>
 </section>
 
 <hr class="sep">
