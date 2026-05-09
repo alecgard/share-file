@@ -71,8 +71,8 @@ function renderFile(filename, content, mime, encoding) {
 
   if (mime === 'text/html') {
     const iframe = document.createElement('iframe');
-    iframe.sandbox = 'allow-scripts allow-popups allow-forms';
-    iframe.srcdoc = text;
+    iframe.sandbox = 'allow-scripts allow-popups allow-popups-to-escape-sandbox allow-forms';
+    iframe.srcdoc = '<base target="_blank">' + text;
     container.appendChild(iframe);
   } else if (mime === 'image/svg+xml') {
     const img = document.createElement('img');
