@@ -126,7 +126,9 @@ if [[ -n "$update_id" ]]; then
   response=$(gh api -X PATCH "gists/$update_id" --input - <<<"$body")
   gist_id="$update_id"
 else
-  body=$(jq -n --arg desc "$desc" --argjson public "$public" \
+  # Prefix description so users can identify gists created by share-file.
+  final_desc="[ShareFile] $desc"
+  body=$(jq -n --arg desc "$final_desc" --argjson public "$public" \
     --arg fn "$filename" --arg c "$content" --arg meta "$meta_json" \
     '{description: $desc, public: $public,
       files: ({} | .["_meta.json"] = {content: $meta} | .[$fn] = {content: $c})}')
