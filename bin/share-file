@@ -41,11 +41,13 @@ URL as a fragment (#k=...), so GitHub stores only ciphertext. Lose the URL =
 lose the content; there is no recovery.
 
 Flags:
-  --no-encrypt        Skip encryption (secret gist, plaintext content). The
-                      gist ID is unguessable but anyone with the link reads
-                      the content directly.
-  --public            Create a public (listed) gist; implies --no-encrypt
-                      (encrypted public gists are gibberish).
+  --no-encrypt        Skip encryption (plaintext content in the gist). The
+                      gist ID is unguessable for secret gists but anyone with
+                      the link reads the content directly.
+  --public            Create a public (listed) gist that shows up on your
+                      GitHub gist profile (default: secret/unlisted).
+                      Independent of --no-encrypt; encrypted public gists are
+                      allowed but unusual.
   --desc <text>       Gist description (ignored under encryption — the
                       description is server-visible).
   --update <id|url>   Update an existing gist. Pass the full rendered URL
@@ -221,11 +223,10 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# --public implies --no-encrypt (encrypted listed gists are gibberish to anyone
-# who finds them on your gist profile, so combining the two makes no sense).
-if $public; then
-  no_encrypt=true
-fi
+# --public and --no-encrypt are independent: --public controls listed-vs-secret
+# gist visibility, --no-encrypt controls whether the content is encrypted. An
+# encrypted public gist is unusual (anyone browsing your profile finds
+# ciphertext) but allowed.
 encrypt=true
 $no_encrypt && encrypt=false
 

@@ -114,10 +114,10 @@ Source:   https://gist.github.com/<you>/abc123
 Rendered: https://alecgard.github.io/share-file/?abc123
 ```
 
-`--public` goes a step further: a public (listed) gist that shows up on your GitHub gist profile. Implies `--no-encrypt`.
+`--public` is an independent visibility flag: a public (listed) gist shows up on your GitHub gist profile (default is secret/unlisted). It can combine with or without `--no-encrypt` — encrypted public gists are allowed but unusual.
 
 ```bash
-share-file --public --desc "Q3 results" dashboard.html
+share-file --public --no-encrypt --desc "Q3 results" dashboard.html
 ```
 
 ## Encrypted shares (default)

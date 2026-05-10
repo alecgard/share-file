@@ -76,8 +76,9 @@ const NO_ENCRYPT_DESC =
 
 const PUBLIC_DESC =
   "Create a public (listed) gist that shows up on the user's GitHub gist " +
-  "profile. Implies no_encrypt (encrypted listed gists are gibberish). Use only " +
-  "when the user explicitly asks to publish publicly.";
+  "profile. Default is secret (unlisted). Independent of no_encrypt — " +
+  "encrypted public gists are allowed but unusual. Use only when the user " +
+  "explicitly asks to publish publicly.";
 
 const server = new McpServer({ name: "share-file", version: "1.0.0" });
 

@@ -77,7 +77,7 @@ share-file --json --no-encrypt --desc "Public chart" /path/to/file.html
 
 Returns the same JSON shape with `"encrypted": false` and a `rendered_url` without the `#k=...` fragment. The gist is still secret (unguessable), but anyone with the gist ID reads the content directly. Prefer the encrypted default unless the user has a specific reason.
 
-`--public` goes a step further: a public (listed) gist that shows up on the user's GitHub gist profile. Implies `--no-encrypt`. Use only when the user explicitly asks to publish publicly.
+`--public` controls gist visibility independently: a public (listed) gist shows up on the user's GitHub gist profile (default is secret/unlisted). It can be combined with or without `--no-encrypt` — encrypted public gists are allowed but unusual. Use `--public` only when the user explicitly asks to publish publicly.
 
 ## Viewing or reading a share
 
