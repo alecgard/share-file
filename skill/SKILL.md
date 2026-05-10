@@ -31,7 +31,7 @@ Returns:
 }
 ```
 
-`--desc` is ignored when encrypting (gist description is server-visible, so it would leak metadata).
+`--desc` is server-visible regardless of encryption (only the file content is encrypted) — useful for labeling shares so they're identifiable in `--created` and on GitHub, but avoid putting sensitive metadata in it for encrypted shares.
 
 ## Updating an existing share
 

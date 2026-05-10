@@ -48,8 +48,9 @@ Flags:
                       GitHub gist profile (default: secret/unlisted).
                       Independent of --no-encrypt; encrypted public gists are
                       allowed but unusual.
-  --desc <text>       Gist description (ignored under encryption — the
-                      description is server-visible).
+  --desc <text>       Gist description shown on GitHub. Server-visible
+                      regardless of encryption — only the file content is
+                      encrypted, not the description.
   --update <id|url>   Update an existing gist. Pass the full rendered URL
                       (with #k=...) for encrypted shares so the key can be
                       reused; pass the bare gist ID for plain shares. Mode
@@ -496,10 +497,6 @@ if $encrypt; then
   filename="payload.b64"
   content="$payload_b64"
   encoding="encrypted"
-  if [[ "$desc" != "Shared file" ]]; then
-    echo "warning: --desc is ignored when encrypting (gist description is server-visible)" >&2
-  fi
-  desc="encrypted"
   meta_json=$(jq -n '{encrypted: true, version: 1, alg: "AES-128-CBC+HMAC-SHA256"}')
 else
   if [[ -n "$update_id" && "$existing_mode" == "encrypted" ]]; then

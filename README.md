@@ -125,9 +125,9 @@ share-file --public --no-encrypt --desc "Q3 results" dashboard.html
 Without flags, content is AES-128-CBC encrypted client-side (HMAC-SHA256 authenticated) before upload, and the master key is appended to the rendered URL as a fragment.
 
 - The browser fragment (`#...`) is never sent to any server, so GitHub stores only ciphertext and the public viewer never sees the key.
-- Filename and MIME type are inside the encrypted blob; only the gist ID and `[ShareFile]` description are visible to GitHub.
+- Filename and MIME type are inside the encrypted blob; only the gist ID and the `[ShareFile] <desc>` description are visible to GitHub.
 - The full URL is the secret. Anyone with it gets in; lose it and the content is unrecoverable — no copy is kept anywhere.
-- `--desc` is ignored under encryption (gist description is server-visible).
+- `--desc` is honored under encryption (server-visible, useful for labeling) — avoid putting sensitive metadata in it.
 - To update an encrypted share, pass the full rendered URL so the same key can be reused (URL stays stable): `share-file --update "https://.../?<id>#k=<key>" file`.
 
 ### View locally without the viewer
@@ -213,4 +213,4 @@ echo "https://my-team.github.io/share-file/" > ~/.config/share-file/viewer
 - **Rate limit.** Unauthenticated GitHub API allows 60 requests/hour per
   viewer IP. Self-hosting gives you your own rate-limit bucket.
 - **Single file per share.** Multi-file artifacts: inline assets or use a CDN.
-- **GitHub visibility.** With encryption GitHub only sees the ciphertext and a `[ShareFile] encrypted` description. Without encryption, gists are unguessable but readable by anyone with the ID, including GitHub.
+- **GitHub visibility.** With encryption GitHub sees only ciphertext plus the `[ShareFile] <desc>` description (the description is always server-visible). Without encryption, gists are unguessable but readable by anyone with the ID, including GitHub.

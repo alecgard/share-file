@@ -98,8 +98,9 @@ server.registerTool(
         .string()
         .optional()
         .describe(
-          "Gist description shown in the GitHub UI. Ignored under encryption " +
-            "(gist description is server-visible, so it would leak metadata).",
+          "Gist description shown in the GitHub UI. Server-visible " +
+            "regardless of encryption (only the file content is encrypted), so " +
+            "avoid putting sensitive metadata here for encrypted shares.",
         ),
       update_id: z
         .string()
@@ -142,7 +143,8 @@ server.registerTool(
         .string()
         .optional()
         .describe(
-          "Gist description shown in the GitHub UI. Ignored under encryption.",
+          "Gist description shown in the GitHub UI. Server-visible " +
+            "regardless of encryption.",
         ),
       update_id: z
         .string()
