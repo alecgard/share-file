@@ -214,3 +214,19 @@ echo "https://my-team.github.io/share-file/" > ~/.config/share-file/viewer
   viewer IP. Self-hosting gives you your own rate-limit bucket.
 - **Single file per share.** Multi-file artifacts: inline assets or use a CDN.
 - **GitHub visibility.** With encryption GitHub sees only ciphertext plus the `[ShareFile] <desc>` description (the description is always server-visible). Without encryption, gists are unguessable but readable by anyone with the ID, including GitHub.
+
+## Uninstall
+
+Removes the script, the agent skill, and the local config (cached
+decryption keys for `--created` listings live here too):
+
+```bash
+rm -f ~/.local/bin/share-file && \
+  rm -rf ~/.claude/skills/share-file ~/.config/share-file
+```
+
+For the Claude Desktop extension, remove **share-file** from
+**Settings → Extensions** in the Desktop app.
+
+Already-published gists are not deleted — manage them at
+<https://gist.github.com>.
