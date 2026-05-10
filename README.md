@@ -24,12 +24,13 @@ mkdir -p ~/.local/bin && \
 ```bash
 $ share-file dashboard.html
 Source:   https://gist.github.com/<you>/abc123
-Rendered: https://alecgard.github.io/share-file/?abc123
+Rendered: https://alecgard.github.io/share-file/?abc123#k=Woa-2A8tTA-P3KfHS6ohUA
 (copied to clipboard)
 ```
 
-That rendered URL works for anyone you send it to. Here's a
-[live example](https://alecgard.github.io/share-file/?64a8a8cd0fbf41caac9ba9fca7fc353c).
+Encrypted client-side by default — the decryption key is appended to the rendered URL as a fragment (`#k=...`), which browsers never send to any server, so GitHub stores only ciphertext. The full URL is the secret. Lose it and the content is unrecoverable. See [Plain shares](#plain-shares) for the unencrypted alternative.
+
+Here's a [live example](https://alecgard.github.io/share-file/?64a8a8cd0fbf41caac9ba9fca7fc353c) (plain, unencrypted).
 
 ## Use it from an agent
 
@@ -46,8 +47,9 @@ mkdir -p ~/.claude/skills/share-file && \
 
 Then ask the agent things like "share this dashboard with my team" or "give me a link to
 that screenshot" — it'll call `share-file --json` and reply with the rendered
-URL. For project-scoped install, drop it in `.claude/skills/share-file/`
-inside the repo instead.
+URL (encrypted by default, so the URL is the secret — only share through a
+channel you trust). For project-scoped install, drop it in
+`.claude/skills/share-file/` inside the repo instead.
 
 ### Claude Desktop
 
@@ -65,9 +67,19 @@ and the rendered URL comes back inline.
 
 ### Update an existing share (URL stays the same)
 
+For encrypted shares (the default), pass the full rendered URL so the key can be reused:
+
 ```bash
-share-file --update abc123 dashboard.html
+share-file --update "https://alecgard.github.io/share-file/?abc123#k=..." dashboard.html
 ```
+
+For plain shares, the bare gist ID works:
+
+```bash
+share-file --no-encrypt --update abc123 dashboard.html
+```
+
+Mode switches (plain↔encrypted) are supported and warn that the rendered URL changes.
 
 ### Read from stdin
 
@@ -84,33 +96,39 @@ $ share-file --json /path/to/chart.png
 {
   "gist_id": "abc123",
   "source_url": "https://gist.github.com/<you>/abc123",
-  "rendered_url": "https://alecgard.github.io/share-file/?abc123",
+  "rendered_url": "https://alecgard.github.io/share-file/?abc123#k=Woa-2A8tTA-P3KfHS6ohUA",
   "filename": "chart.png",
   "mime_type": "image/png",
-  "encoding": "base64"
+  "encoding": "base64",
+  "encrypted": true
 }
 ```
 
-### Public (listed) gist instead of secret
+## Plain shares
+
+Pass `--no-encrypt` to skip client-side encryption. The gist is still secret (unguessable), but anyone with the gist ID reads the content directly:
 
 ```bash
-share-file --public --desc "Q3 results" dashboard.html
-```
-
-## Private shares
-
-Pass `--encrypt` to encrypt content client-side before upload. The decryption key is appended to the rendered URL as a fragment (`#k=...`), which browsers never send to any server — so GitHub stores only ciphertext and the public viewer never sees the key.
-
-```bash
-$ share-file --encrypt dashboard.html
+$ share-file --no-encrypt --desc "Q3 results" dashboard.html
 Source:   https://gist.github.com/<you>/abc123
-Rendered: https://alecgard.github.io/share-file/?abc123#k=Woa-2A8tTA-P3KfHS6ohUA
+Rendered: https://alecgard.github.io/share-file/?abc123
 ```
 
-- AES-128-CBC, authenticated with HMAC-SHA256. Filename and MIME type are also inside the encrypted blob.
+`--public` is an independent visibility flag: a public (listed) gist shows up on your GitHub gist profile (default is secret/unlisted). It can combine with or without `--no-encrypt` — encrypted public gists are allowed but unusual.
+
+```bash
+share-file --public --no-encrypt --desc "Q3 results" dashboard.html
+```
+
+## Encrypted shares (default)
+
+Without flags, content is AES-128-CBC encrypted client-side (HMAC-SHA256 authenticated) before upload, and the master key is appended to the rendered URL as a fragment.
+
+- The browser fragment (`#...`) is never sent to any server, so GitHub stores only ciphertext and the public viewer never sees the key.
+- Filename and MIME type are inside the encrypted blob; only the gist ID and the `[ShareFile] <desc>` description are visible to GitHub.
 - The full URL is the secret. Anyone with it gets in; lose it and the content is unrecoverable — no copy is kept anywhere.
-- To update an encrypted share, pass the full rendered URL so the same key can be reused (URL stays stable): `share-file --encrypt --update "https://.../?<id>#k=<key>" file`.
-- Not compatible with `--public`; `--desc` is ignored (gist description is server-visible).
+- `--desc` is honored under encryption (server-visible, useful for labeling) — avoid putting sensitive metadata in it.
+- To update an encrypted share, pass the full rendered URL so the same key can be reused (URL stays stable): `share-file --update "https://.../?<id>#k=<key>" file`.
 
 ### View locally without the viewer
 
@@ -191,8 +209,8 @@ echo "https://my-team.github.io/share-file/" > ~/.config/share-file/viewer
 
 ## Limits and caveats
 
-- **Unguessable, not authenticated.** Anyone with the gist ID can view. Use `--encrypt` to keep content opaque to GitHub and anyone who finds the gist ID alone.
+- **Unguessable, not authenticated.** Anyone with the URL can view. With encryption (the default), the URL itself is the secret — share it through a channel you trust. Without encryption (`--no-encrypt`), the gist ID alone is enough.
 - **Rate limit.** Unauthenticated GitHub API allows 60 requests/hour per
   viewer IP. Self-hosting gives you your own rate-limit bucket.
 - **Single file per share.** Multi-file artifacts: inline assets or use a CDN.
-- **Sensitive content.** Without `--encrypt`, gists are unguessable but readable by GitHub. With `--encrypt`, the URL itself is the secret — share it through a channel you trust.
+- **GitHub visibility.** With encryption GitHub sees only ciphertext plus the `[ShareFile] <desc>` description (the description is always server-visible). Without encryption, gists are unguessable but readable by anyone with the ID, including GitHub.

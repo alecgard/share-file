@@ -35,13 +35,27 @@ Usage:
   share-file --read <gist-id|rendered-url>
   share-file --created [--json]
 
+Shares are encrypted by default: content is AES-128-CBC encrypted client-side
+(HMAC-SHA256 authenticated) and the decryption key is appended to the rendered
+URL as a fragment (#k=...), so GitHub stores only ciphertext. Lose the URL =
+lose the content; there is no recovery.
+
 Flags:
-  --desc <text>       Gist description (default: "Shared file")
-  --public            Create a public (listed) gist instead of secret
-  --encrypt           Encrypt content client-side; key goes in URL fragment
-  --update <id|url>   Update an existing gist. Pass the bare gist ID for
-                      plain shares, or the full rendered URL (with #k=...)
-                      for encrypted ones — the key lives only in the URL.
+  --no-encrypt        Skip encryption (plaintext content in the gist). The
+                      gist ID is unguessable for secret gists but anyone with
+                      the link reads the content directly.
+  --public            Create a public (listed) gist that shows up on your
+                      GitHub gist profile (default: secret/unlisted).
+                      Independent of --no-encrypt; encrypted public gists are
+                      allowed but unusual.
+  --desc <text>       Gist description shown on GitHub. Server-visible
+                      regardless of encryption — only the file content is
+                      encrypted, not the description.
+  --update <id|url>   Update an existing gist. Pass the full rendered URL
+                      (with #k=...) for encrypted shares so the key can be
+                      reused; pass the bare gist ID for plain shares. Mode
+                      switches (plain<->encrypted) are supported and warn
+                      that the rendered URL changes.
   --view <id|url>     Fetch, decrypt locally, and open in the default browser
                       via a data: URL (no third-party viewer involved). Pass
                       the rendered URL for encrypted shares.
@@ -60,11 +74,6 @@ Flags:
 Renderable in the viewer: HTML, images (PNG/JPG/GIF/SVG/WebP), PDF,
 plain text / source / JSON / XML / Markdown, audio, video. Other types
 produce a download link. Binary files are base64-encoded into the gist.
-
-With --encrypt, content is AES-128-CBC encrypted in the browser before
-upload (HMAC-SHA256 authenticated). The decryption key is appended to
-the rendered URL as a fragment (#k=...) and never sent to any server.
-Lose the URL = lose the content; there is no recovery.
 
 Requires: gh (https://cli.github.com), jq, file, openssl, xxd. Authenticated via 'gh auth login'.
 EOF
@@ -185,7 +194,7 @@ parse_target() {
 main() {
 desc="Shared file"
 public=false
-encrypt=false
+no_encrypt=false
 update_id=""
 view_target=""
 read_target=""
@@ -198,27 +207,29 @@ mime_override=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --desc)     desc="$2"; shift 2 ;;
-    --public)   public=true; shift ;;
-    --encrypt)  encrypt=true; shift ;;
-    --update)   update_id="$2"; shift 2 ;;
-    --view)     view_target="$2"; shift 2 ;;
-    --read)     read_target="$2"; shift 2 ;;
-    --created)  list_created=true; shift ;;
-    --stdin)    use_stdin=true; shift ;;
-    --filename) filename_override="$2"; shift 2 ;;
-    --mime)     mime_override="$2"; shift 2 ;;
-    --json)     output_json=true; shift ;;
-    -h|--help)  usage 0 ;;
+    --desc)       desc="$2"; shift 2 ;;
+    --public)     public=true; shift ;;
+    --no-encrypt) no_encrypt=true; shift ;;
+    --update)     update_id="$2"; shift 2 ;;
+    --view)       view_target="$2"; shift 2 ;;
+    --read)       read_target="$2"; shift 2 ;;
+    --created)    list_created=true; shift ;;
+    --stdin)      use_stdin=true; shift ;;
+    --filename)   filename_override="$2"; shift 2 ;;
+    --mime)       mime_override="$2"; shift 2 ;;
+    --json)       output_json=true; shift ;;
+    -h|--help)    usage 0 ;;
     -*) echo "unknown flag: $1" >&2; usage ;;
     *)  file="$1"; shift ;;
   esac
 done
 
-if $encrypt && $public; then
-  echo "error: --encrypt and --public are incompatible (encrypted public gists are gibberish)" >&2
-  exit 1
-fi
+# --public and --no-encrypt are independent: --public controls listed-vs-secret
+# gist visibility, --no-encrypt controls whether the content is encrypted. An
+# encrypted public gist is unusual (anyone browsing your profile finds
+# ciphertext) but allowed.
+encrypt=true
+$no_encrypt && encrypt=false
 
 if [[ -n "$view_target" && -n "$read_target" ]]; then
   echo "error: --view and --read are mutually exclusive" >&2
@@ -226,14 +237,14 @@ if [[ -n "$view_target" && -n "$read_target" ]]; then
 fi
 fetch_target="${view_target:-$read_target}"
 if [[ -n "$fetch_target" ]]; then
-  if $encrypt || $public || [[ -n "$update_id" ]] || $use_stdin || \
+  if $no_encrypt || $public || [[ -n "$update_id" ]] || $use_stdin || \
      [[ -n "$file" ]] || [[ -n "$filename_override" ]] || [[ -n "$mime_override" ]]; then
     echo "error: --view/--read doesn't combine with the upload-mode flags" >&2
     exit 1
   fi
 fi
 if $list_created; then
-  if $encrypt || $public || [[ -n "$update_id" ]] || [[ -n "$fetch_target" ]] || \
+  if $no_encrypt || $public || [[ -n "$update_id" ]] || [[ -n "$fetch_target" ]] || \
      $use_stdin || [[ -n "$file" ]] || [[ -n "$filename_override" ]] || \
      [[ -n "$mime_override" ]]; then
     echo "error: --created only takes --json" >&2
@@ -253,7 +264,10 @@ command -v gh   >/dev/null || { echo "error: gh not installed (https://cli.githu
 command -v jq   >/dev/null || { echo "error: jq not installed" >&2; exit 1; }
 command -v file >/dev/null || { echo "error: file(1) not installed" >&2; exit 1; }
 command -v base64 >/dev/null || { echo "error: base64 not installed" >&2; exit 1; }
-if $encrypt || [[ -n "$fetch_target" ]]; then
+# Crypto tools needed unless this invocation is purely plain-mode upload, plain
+# --created, etc. The defaults make encryption the common path, so just always
+# require them on any non-listing invocation.
+if ! $list_created; then
   command -v openssl >/dev/null || { echo "error: openssl not installed" >&2; exit 1; }
   command -v xxd     >/dev/null || { echo "error: xxd not installed" >&2; exit 1; }
 fi
@@ -426,6 +440,31 @@ case "$mime_type" in
     ;;
 esac
 
+# For --update, fetch the existing gist so we can detect its mode (plain vs
+# encrypted) and the old file's name. Both matter for safe mode switching:
+# the old file gets nulled out in the PATCH so the gist doesn't end up with
+# stale leftovers from the previous mode.
+existing_mode=""
+existing_old_filename=""
+if [[ -n "$update_id" ]]; then
+  existing_response=$(gh api "gists/$update_id") || {
+    echo "error: failed to fetch gist $update_id" >&2; exit 1; }
+  existing_meta=$(jq -r '.files["_meta.json"].content // empty' <<<"$existing_response")
+  if [[ -z "$existing_meta" ]]; then
+    existing_mode="plain"
+    existing_old_filename=$(jq -r '.files | to_entries[0].key' <<<"$existing_response")
+  else
+    existing_enc=$(jq -r '.encrypted // false' <<<"$existing_meta")
+    if [[ "$existing_enc" == "true" ]]; then
+      existing_mode="encrypted"
+      existing_old_filename="payload.b64"
+    else
+      existing_mode="plain"
+      existing_old_filename=$(jq -r '.filename' <<<"$existing_meta")
+    fi
+  fi
+fi
+
 master_key_b64url=""
 if $encrypt; then
   # For encrypted updates, reuse the original key so the URL stays stable.
@@ -434,10 +473,16 @@ if $encrypt; then
   if [[ -n "$update_id" ]]; then
     if [[ -n "$update_key_from_url" ]]; then
       existing_key="$update_key_from_url"
+      if [[ "$existing_mode" == "plain" ]]; then
+        echo "warning: switching from plain to encrypted; the rendered URL now requires #k=..." >&2
+      fi
     else
-      echo "error: --encrypt --update needs the full rendered URL (with #k=...) so the key" >&2
-      echo "  can be reused. You passed a bare gist ID; pass the rendered URL instead." >&2
-      exit 1
+      if [[ "$existing_mode" == "encrypted" ]]; then
+        echo "error: this share is encrypted; pass the full rendered URL (with #k=...) so the" >&2
+        echo "  key can be reused. You passed a bare gist ID. To convert to plain, use --no-encrypt." >&2
+        exit 1
+      fi
+      echo "warning: switching from plain to encrypted; the rendered URL now requires #k=..." >&2
     fi
   fi
 
@@ -452,12 +497,13 @@ if $encrypt; then
   filename="payload.b64"
   content="$payload_b64"
   encoding="encrypted"
-  if [[ "$desc" != "Shared file" ]]; then
-    echo "warning: --desc is ignored with --encrypt (gist description is server-visible)" >&2
-  fi
-  desc="encrypted"
   meta_json=$(jq -n '{encrypted: true, version: 1, alg: "AES-128-CBC+HMAC-SHA256"}')
 else
+  if [[ -n "$update_id" && "$existing_mode" == "encrypted" ]]; then
+    echo "warning: switching from encrypted to plain; the old rendered URL with #k=... no longer" >&2
+    echo "  decrypts. The new URL is the bare gist ID (?$update_id) — share holders need to update." >&2
+    rm -f "$KEY_CACHE_DIR/$update_id" 2>/dev/null || true
+  fi
   meta_json=$(jq -n --arg fn "$filename" --arg mt "$mime_type" --arg enc "$encoding" \
     '{filename: $fn, mime_type: $mt, encoding: $enc}')
 fi
@@ -476,8 +522,15 @@ if (( size > SIZE_LIMIT )); then
 fi
 
 if [[ -n "$update_id" ]]; then
-  body=$(jq -n --arg fn "$filename" --arg c "$content" --arg meta "$meta_json" \
-    '{files: ({} | .["_meta.json"] = {content: $meta} | .[$fn] = {content: $c})}')
+  files_obj=$(jq -n --arg meta "$meta_json" --arg fn "$filename" --arg c "$content" \
+    '{} | .["_meta.json"] = {content: $meta} | .[$fn] = {content: $c}')
+  # Null out the previous file when its name changes (mode switch or rename),
+  # so the gist doesn't accumulate stale leftovers.
+  if [[ -n "$existing_old_filename" && "$existing_old_filename" != "$filename" \
+        && "$existing_old_filename" != "_meta.json" ]]; then
+    files_obj=$(jq --arg ofn "$existing_old_filename" '.[$ofn] = null' <<<"$files_obj")
+  fi
+  body=$(jq -n --argjson files "$files_obj" '{files: $files}')
   response=$(gh api -X PATCH "gists/$update_id" --input - <<<"$body")
   gist_id="$update_id"
 else

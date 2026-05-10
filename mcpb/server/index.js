@@ -61,16 +61,24 @@ function commonFlags(args) {
   const flags = [];
   if (args.description) flags.push("--desc", args.description);
   if (args.public) flags.push("--public");
-  if (args.encrypt) flags.push("--encrypt");
+  if (args.no_encrypt) flags.push("--no-encrypt");
   if (args.update_id) flags.push("--update", args.update_id);
   if (args.mime_override) flags.push("--mime", args.mime_override);
   return flags;
 }
 
-const ENCRYPT_DESC =
-  "Encrypt content client-side; the decryption key is appended to the rendered_url " +
-  "as a fragment (#k=...) and never sent to any server. Use for sensitive content. " +
-  "The full URL is the secret — anyone with it can decrypt. Not compatible with public.";
+const NO_ENCRYPT_DESC =
+  "Skip the default client-side encryption. Without this flag, content is " +
+  "AES-128-CBC encrypted (HMAC-SHA256 authenticated) and the decryption key is " +
+  "appended to the rendered_url as a fragment (#k=...) — GitHub stores only " +
+  "ciphertext. Set true only when the user explicitly wants a plain share or " +
+  "the content is non-sensitive (anyone with the gist ID can read it directly).";
+
+const PUBLIC_DESC =
+  "Create a public (listed) gist that shows up on the user's GitHub gist " +
+  "profile. Default is secret (unlisted). Independent of no_encrypt — " +
+  "encrypted public gists are allowed but unusual. Use only when the user " +
+  "explicitly asks to publish publicly.";
 
 const server = new McpServer({ name: "share-file", version: "1.0.0" });
 
@@ -79,26 +87,31 @@ server.registerTool(
   {
     description:
       "Publish a file from disk to a shareable URL backed by a secret GitHub gist. " +
-      "Returns JSON with the rendered_url to send to the user. Works for any browser-renderable " +
-      "artifact (HTML, images, PDFs, audio/video, text/source). Requires gh and jq installed " +
-      "and `gh auth login` completed. Do not use for files >900KB or content the user has flagged sensitive.",
+      "Encrypted client-side by default — the decryption key rides in the URL fragment " +
+      "(#k=...), so GitHub stores only ciphertext. Returns JSON with the rendered_url " +
+      "to send to the user. Works for any browser-renderable artifact (HTML, images, " +
+      "PDFs, audio/video, text/source). Requires gh and jq installed and `gh auth login` " +
+      "completed. Do not use for files >900KB.",
     inputSchema: {
       path: z.string().describe("Absolute path to the file to share."),
       description: z
         .string()
         .optional()
-        .describe("Gist description shown in the GitHub UI."),
+        .describe(
+          "Gist description shown in the GitHub UI. Server-visible " +
+            "regardless of encryption (only the file content is encrypted), so " +
+            "avoid putting sensitive metadata here for encrypted shares.",
+        ),
       update_id: z
         .string()
         .optional()
         .describe(
-          "If provided, update the gist with this ID instead of creating a new one. The rendered_url stays the same.",
+          "If provided, update the gist with this ID instead of creating a new one. " +
+            "For encrypted shares pass the full rendered URL (with #k=...) so the key " +
+            "can be reused and the URL stays stable; bare gist ID works for plain shares.",
         ),
-      public: z
-        .boolean()
-        .optional()
-        .describe("Create a public (listed) gist instead of secret. Default false."),
-      encrypt: z.boolean().optional().describe(ENCRYPT_DESC),
+      public: z.boolean().optional().describe(PUBLIC_DESC),
+      no_encrypt: z.boolean().optional().describe(NO_ENCRYPT_DESC),
       mime_override: z
         .string()
         .optional()
@@ -115,8 +128,10 @@ server.registerTool(
   {
     description:
       "Publish inline content (a string) to a shareable URL backed by a secret GitHub gist. " +
-      "Use when the artifact only exists in this conversation and isn't on disk yet. " +
-      "Returns JSON with the rendered_url. The filename determines the MIME type and viewer behavior.",
+      "Encrypted client-side by default — the decryption key rides in the URL fragment " +
+      "(#k=...), so GitHub stores only ciphertext. Use when the artifact only exists in " +
+      "this conversation and isn't on disk yet. Returns JSON with the rendered_url. " +
+      "The filename determines the MIME type and viewer behavior.",
     inputSchema: {
       content: z.string().describe("The text content to share."),
       filename: z
@@ -127,18 +142,19 @@ server.registerTool(
       description: z
         .string()
         .optional()
-        .describe("Gist description shown in the GitHub UI."),
+        .describe(
+          "Gist description shown in the GitHub UI. Server-visible " +
+            "regardless of encryption.",
+        ),
       update_id: z
         .string()
         .optional()
         .describe(
-          "If provided, update the gist with this ID instead of creating a new one.",
+          "If provided, update the gist with this ID instead of creating a new one. " +
+            "For encrypted shares pass the full rendered URL (with #k=...).",
         ),
-      public: z
-        .boolean()
-        .optional()
-        .describe("Create a public (listed) gist instead of secret."),
-      encrypt: z.boolean().optional().describe(ENCRYPT_DESC),
+      public: z.boolean().optional().describe(PUBLIC_DESC),
+      no_encrypt: z.boolean().optional().describe(NO_ENCRYPT_DESC),
       mime_override: z
         .string()
         .optional()
