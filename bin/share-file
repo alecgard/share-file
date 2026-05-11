@@ -34,6 +34,7 @@ Usage:
   share-file --view <id>[#k=<key>]
   share-file --read <id>[#k=<key>]
   share-file --created [--json]
+  share-file --upgrade
 
 Shares are encrypted by default: content is AES-128-CBC encrypted client-side
 (HMAC-SHA256 authenticated) and the decryption key is appended to the rendered
@@ -72,6 +73,10 @@ Flags:
   --created           List every share-file gist on your account, one per line:
                       timestamp, type (plain/encrypted), and rendered URL with
                       decryption key when known. --created --json for JSON.
+  --upgrade           Re-download the latest share-file script (and the agent
+                      skill, if installed) from the upstream repo, overwriting
+                      the current install in place. Refuses to run if the
+                      script lives inside a git clone — use 'git pull' there.
   --stdin             Read content from stdin (requires --filename)
   --filename <name>   Filename to use (overrides basename / required with --stdin)
   --mime <type>       Override MIME type detection
@@ -201,6 +206,63 @@ parse_target() {
   parsed_id="${parsed_id%%&*}"
 }
 
+# Re-download the latest script (and skill, if installed) from upstream and
+# overwrite the current install. Honors $SHARE_FILE_UPSTREAM / $SHARE_FILE_SKILL_DIR
+# so self-hosters can upgrade from their fork; defaults match bin/setup.
+self_upgrade() {
+  command -v curl >/dev/null || { echo "error: curl not installed" >&2; exit 1; }
+
+  local upstream="${SHARE_FILE_UPSTREAM:-alecgard/share-file}"
+
+  # Resolve $0 (which may be a symlink, or a relative path) to a canonical path.
+  local script_path="$0"
+  while [[ -L "$script_path" ]]; do
+    local link
+    link=$(readlink "$script_path")
+    if [[ "$link" = /* ]]; then
+      script_path="$link"
+    else
+      script_path="$(cd "$(dirname "$script_path")" && pwd)/$link"
+    fi
+  done
+  script_path="$(cd "$(dirname "$script_path")" && pwd)/$(basename "$script_path")"
+
+  # If we're running from a git clone, overwriting the working tree is the
+  # wrong thing — point the user at `git pull` instead.
+  if command -v git >/dev/null 2>&1 && \
+     git -C "$(dirname "$script_path")" rev-parse --show-toplevel >/dev/null 2>&1; then
+    echo "error: ${script_path} is inside a git clone — use 'git pull' instead" >&2
+    exit 1
+  fi
+
+  echo "Upgrading share-file from ${upstream}"
+  echo "  Script: ${script_path}"
+
+  local tmp_script
+  tmp_script=$(mktemp)
+  TMP_PATHS+=("$tmp_script")
+  curl -fsSL "https://raw.githubusercontent.com/${upstream}/main/bin/share-file" \
+    -o "$tmp_script" || { echo "error: failed to download new script" >&2; exit 1; }
+  chmod +x "$tmp_script"
+  mv "$tmp_script" "$script_path" || {
+    echo "error: failed to write ${script_path}" >&2; exit 1; }
+
+  local skill_file="${SHARE_FILE_SKILL_DIR:-$HOME/.claude/skills/share-file}/SKILL.md"
+  if [[ -f "$skill_file" ]]; then
+    echo "  Skill:  ${skill_file}"
+    local tmp_skill
+    tmp_skill=$(mktemp)
+    TMP_PATHS+=("$tmp_skill")
+    curl -fsSL "https://raw.githubusercontent.com/${upstream}/main/skill/SKILL.md" \
+      -o "$tmp_skill" || { echo "error: failed to download skill" >&2; exit 1; }
+    mv "$tmp_skill" "$skill_file" || {
+      echo "error: failed to write ${skill_file}" >&2; exit 1; }
+  fi
+
+  echo "Done."
+  exit 0
+}
+
 main() {
 desc="Shared file"
 public=false
@@ -228,6 +290,7 @@ while [[ $# -gt 0 ]]; do
     --filename)   filename_override="$2"; shift 2 ;;
     --mime)       mime_override="$2"; shift 2 ;;
     --json)       output_json=true; shift ;;
+    --upgrade)    self_upgrade ;;
     -h|--help)    usage 0 ;;
     -*) echo "unknown flag: $1" >&2; usage ;;
     *)  file="$1"; shift ;;

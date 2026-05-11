@@ -217,6 +217,14 @@ echo "https://my-team.github.io/share-file/" > ~/.config/share-file/viewer
 - **Single file per share.** Multi-file artifacts: inline assets or use a CDN.
 - **GitHub visibility.** With encryption GitHub sees only ciphertext plus the `[ShareFile] <desc>` description (the description is always server-visible). Without encryption, gists are unguessable but readable by anyone with the ID, including GitHub.
 
+## Upgrade
+
+```bash
+share-file --upgrade
+```
+
+Re-downloads the latest script (and the agent skill, if it's installed at `~/.claude/skills/share-file/`) from the upstream repo, overwriting the current install in place. Self-hosters can point at their fork with `SHARE_FILE_UPSTREAM=<owner>/<repo>`. Refuses to run if the script lives inside a git clone — use `git pull` there.
+
 ## Uninstall
 
 Removes the script, the agent skill, and the local config (cached
