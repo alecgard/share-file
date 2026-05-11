@@ -107,8 +107,9 @@ server.registerTool(
         .optional()
         .describe(
           "If provided, update the gist with this ID instead of creating a new one. " +
-            "For encrypted shares pass the full rendered URL (with #k=...) so the key " +
-            "can be reused and the URL stays stable; bare gist ID works for plain shares.",
+            "For encrypted shares pass '<gist-id>#k=<key>' so the same key is reused and " +
+            "the URL stays stable; bare gist ID works for plain shares. A full rendered " +
+            "URL is also accepted as a convenience.",
         ),
       public: z.boolean().optional().describe(PUBLIC_DESC),
       no_encrypt: z.boolean().optional().describe(NO_ENCRYPT_DESC),
@@ -151,7 +152,7 @@ server.registerTool(
         .optional()
         .describe(
           "If provided, update the gist with this ID instead of creating a new one. " +
-            "For encrypted shares pass the full rendered URL (with #k=...).",
+            "For encrypted shares pass '<gist-id>#k=<key>' (or the full rendered URL).",
         ),
       public: z.boolean().optional().describe(PUBLIC_DESC),
       no_encrypt: z.boolean().optional().describe(NO_ENCRYPT_DESC),
@@ -171,8 +172,9 @@ server.registerTool(
 );
 
 const TARGET_DESC =
-  "Either a bare gist ID (for plain shares) or the full rendered URL with " +
-  "the #k=... fragment (required for encrypted shares — the key lives only in the URL).";
+  "A bare gist ID for plain shares, or '<gist-id>#k=<key>' for encrypted " +
+  "shares (the key lives only in the URL fragment, so you must supply it). " +
+  "A full rendered URL is also accepted as a convenience.";
 
 server.registerTool(
   "read_share",

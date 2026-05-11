@@ -35,10 +35,10 @@ Returns:
 
 ## Updating an existing share
 
-For encrypted shares (the default), pass the full `rendered_url` to `--update` so the key in the fragment can be reused — the URL stays stable:
+For encrypted shares (the default), pass `<gist-id>#k=<key>` to `--update` so the same key is reused and the URL stays stable:
 
 ```bash
-share-file --json --update "https://alecgard.github.io/share-file/?abc123#k=..." /path/to/file.html
+share-file --json --update "abc123#k=..." /path/to/file.html
 ```
 
 For plain shares, the bare gist ID works:
@@ -47,7 +47,7 @@ For plain shares, the bare gist ID works:
 share-file --json --no-encrypt --update <gist-id> /path/to/file.html
 ```
 
-Mode switches are supported (plain↔encrypted) and warn that the rendered URL changes.
+A full rendered URL is also accepted in place of `<id>#k=<key>`. Mode switches are supported (plain↔encrypted) and warn that the rendered URL changes.
 
 ## From stdin
 
@@ -81,9 +81,11 @@ Returns the same JSON shape with `"encrypted": false` and a `rendered_url` witho
 
 ## Viewing or reading a share
 
-`share-file --view <gist-id|rendered-url>` fetches the gist, decrypts locally if encrypted, builds a `data:` URL with the decoded content, and opens it in the user's default browser. Skips the third-party viewer entirely. Use when the user wants to preview a share without involving the public viewer.
+`share-file --view <id>[#k=<key>]` fetches the gist, decrypts locally if encrypted, builds a `data:` URL with the decoded content, and opens it in the user's default browser. Skips the third-party viewer entirely. Use when the user wants to preview a share without involving the public viewer.
 
-`share-file --read <gist-id|rendered-url>` does the same fetch+decrypt but emits JSON to stdout (`{filename, mime_type, encoding, content}`) instead of opening a browser. Use when you need to read, summarize, or transform the contents of a share — no browser side effect.
+`share-file --read <id>[#k=<key>]` does the same fetch+decrypt but emits JSON to stdout (`{filename, mime_type, encoding, content}`) instead of opening a browser. Use when you need to read, summarize, or transform the contents of a share — no browser side effect.
+
+Plain shares take just the gist ID; encrypted shares need the key as `<gist-id>#k=<key>`. A full rendered URL is also accepted for convenience.
 
 ## Listing the user's shares
 

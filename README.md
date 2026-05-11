@@ -67,10 +67,10 @@ and the rendered URL comes back inline.
 
 ### Update an existing share (URL stays the same)
 
-For encrypted shares (the default), pass the full rendered URL so the key can be reused:
+For encrypted shares (the default), pass `<gist-id>#k=<key>` so the same key is reused and the URL stays stable:
 
 ```bash
-share-file --update "https://alecgard.github.io/share-file/?abc123#k=..." dashboard.html
+share-file --update "abc123#k=..." dashboard.html
 ```
 
 For plain shares, the bare gist ID works:
@@ -78,6 +78,8 @@ For plain shares, the bare gist ID works:
 ```bash
 share-file --no-encrypt --update abc123 dashboard.html
 ```
+
+A full rendered URL is accepted anywhere an ID is, as a convenience for paste-from-clipboard.
 
 Mode switches (plain↔encrypted) are supported and warn that the rendered URL changes.
 
@@ -128,20 +130,20 @@ Without flags, content is AES-128-CBC encrypted client-side (HMAC-SHA256 authent
 - Filename and MIME type are inside the encrypted blob; only the gist ID and the `[ShareFile] <desc>` description are visible to GitHub.
 - The full URL is the secret. Anyone with it gets in; lose it and the content is unrecoverable — no copy is kept anywhere.
 - `--desc` is honored under encryption (server-visible, useful for labeling) — avoid putting sensitive metadata in it.
-- To update an encrypted share, pass the full rendered URL so the same key can be reused (URL stays stable): `share-file --update "https://.../?<id>#k=<key>" file`.
+- To update an encrypted share, pass `<id>#k=<key>` so the same key is reused and the URL stays stable: `share-file --update "<id>#k=<key>" file`. (A full rendered URL is accepted too, for convenience.)
 
 ### View locally without the viewer
 
 ```bash
-share-file --view "https://alecgard.github.io/share-file/?abc123#k=Woa-2A8tTA-P3KfHS6ohUA"
+share-file --view "abc123#k=Woa-2A8tTA-P3KfHS6ohUA"
 ```
 
-Fetches, decrypts locally, and opens the result in your default browser as a `data:` URL — no viewer involved, no third-party JS sees the content. Works for plain shares too (just pass the gist ID). Markdown opens as plain text since there's no in-browser renderer.
+Fetches, decrypts locally, and opens the result in your default browser as a `data:` URL — no viewer involved, no third-party JS sees the content. Works for plain shares too (just pass the gist ID). Markdown opens as plain text since there's no in-browser renderer. A full rendered URL is also accepted as a convenience for paste-from-clipboard.
 
 For scripts and agents, `--read` returns the decoded content as JSON (`{filename, mime_type, encoding, content}`) instead of opening a browser:
 
 ```bash
-share-file --read "https://alecgard.github.io/share-file/?abc123#k=..."
+share-file --read "abc123#k=..."
 ```
 
 ### List your shares
