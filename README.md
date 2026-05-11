@@ -138,7 +138,7 @@ Without flags, content is AES-128-CBC encrypted client-side (HMAC-SHA256 authent
 share-file --view "abc123#k=Woa-2A8tTA-P3KfHS6ohUA"
 ```
 
-Fetches, decrypts locally, and opens the result in your default browser as a `data:` URL — no viewer involved, no third-party JS sees the content. Works for plain shares too (just pass the gist ID). Markdown opens as plain text since there's no in-browser renderer. A full rendered URL is also accepted as a convenience for paste-from-clipboard.
+Fetches, decrypts locally, and opens the result in your default browser via a temporary local HTML wrapper — no viewer involved, no third-party JS sees the content. The wrapper lives in a private temp dir (0700/0600) under `$TMPDIR` and is left in place so browser refresh keeps working; the OS reaps it on its own schedule. Works for plain shares too (just pass the gist ID). Markdown and other text types are shown as plain text in a `<pre>` block since there's no in-browser renderer. A full rendered URL is also accepted as a convenience for paste-from-clipboard.
 
 For scripts and agents, `--read` returns the decoded content as JSON (`{filename, mime_type, encoding, content}`) instead of opening a browser:
 

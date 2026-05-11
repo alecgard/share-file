@@ -62,7 +62,9 @@ Flags:
                       warn that the rendered URL changes.
   --view <id>[#k=<key>]
                       Fetch, decrypt locally, and open in the default browser
-                      via a data: URL (no third-party viewer involved).
+                      via a temporary local HTML wrapper (no third-party
+                      viewer involved). The wrapper is left in \$TMPDIR for
+                      the OS to clean up so browser refresh keeps working.
   --read <id>[#k=<key>]
                       Like --view but emit the decoded content as JSON to
                       stdout instead of opening a browser. Useful for agents
@@ -323,24 +325,87 @@ if [[ -n "$fetch_target" ]]; then
     exit 0
   fi
 
-  # --view: build data: URL and open in browser.
+  # --view: write a local HTML wrapper to a private temp dir and open it.
+  # `open data:...` is no longer supported on macOS (LaunchServices has no
+  # handler for the data: scheme), so we launch via a local .html file
+  # instead. Binary types are embedded as data: URLs *inside* the HTML,
+  # which still works because the browser is already loaded and handles
+  # the embedded data: URL natively (only top-level navigation is blocked).
+  view_dir=$(mktemp -d "${TMPDIR:-/tmp}/share-file.XXXXXX")
+  chmod 700 "$view_dir"
+  view_html="$view_dir/view.html"
+
   if [[ "$encoding" == "base64" ]]; then
     content_b64=$(printf '%s' "$content" | tr -d '[:space:]')
   else
-    content_b64=$(printf '%s' "$content" | openssl base64 -A)
+    content_b64=""
   fi
-  data_url="data:${mime_type};base64,${content_b64}"
+
+  title_escaped=$(printf '%s' "$filename" | \
+    sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g')
+
+  {
+    printf '<!DOCTYPE html>\n<html lang="en"><head><meta charset="utf-8">\n'
+    printf '<title>%s</title>\n<style>\n' "$title_escaped"
+    cat <<'CSS'
+html,body{margin:0;padding:0;background:#1a1a1a;color:#eee;font-family:system-ui,-apple-system,sans-serif}
+body{min-height:100vh;display:flex;align-items:center;justify-content:center}
+img,video{max-width:100%;max-height:100vh;display:block}
+embed{width:100vw;height:100vh}
+pre{margin:0;padding:1em;width:100%;min-height:100vh;box-sizing:border-box;overflow:auto;white-space:pre-wrap;word-wrap:break-word;font:13px/1.5 ui-monospace,SF Mono,Menlo,monospace;background:#1a1a1a;color:#eee;align-self:stretch}
+audio{width:80%;max-width:600px}
+.dl{padding:2em;text-align:center}.dl a{color:#6af;text-decoration:none}.dl a:hover{text-decoration:underline}
+CSS
+    printf '</style></head><body>\n'
+
+    case "$mime_type" in
+      text/html)
+        printf '%s' "$content"
+        ;;
+      text/*|application/json|application/xml|application/javascript|application/x-yaml|application/yaml)
+        printf '<pre>'
+        printf '%s' "$content" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'
+        printf '</pre>'
+        ;;
+      image/*)
+        [[ -n "$content_b64" ]] || content_b64=$(printf '%s' "$content" | openssl base64 -A)
+        printf '<img src="data:%s;base64,%s" alt="%s">' "$mime_type" "$content_b64" "$title_escaped"
+        ;;
+      application/pdf)
+        printf '<embed src="data:%s;base64,%s" type="%s">' "$mime_type" "$content_b64" "$mime_type"
+        ;;
+      audio/*)
+        printf '<audio controls src="data:%s;base64,%s"></audio>' "$mime_type" "$content_b64"
+        ;;
+      video/*)
+        printf '<video controls src="data:%s;base64,%s"></video>' "$mime_type" "$content_b64"
+        ;;
+      *)
+        [[ -n "$content_b64" ]] || content_b64=$(printf '%s' "$content" | openssl base64 -A)
+        printf '<div class="dl"><p>%s (%s)</p>' "$title_escaped" "$mime_type"
+        printf '<p><a href="data:%s;base64,%s" download="%s">Download</a></p></div>' \
+          "$mime_type" "$content_b64" "$title_escaped"
+        ;;
+    esac
+
+    printf '\n</body></html>\n'
+  } > "$view_html"
+  chmod 600 "$view_html"
 
   if command -v open >/dev/null 2>&1; then
-    open "$data_url" && echo "Opened $filename in browser."
+    open "$view_html" && echo "Opened $filename in browser."
   elif command -v xdg-open >/dev/null 2>&1; then
-    xdg-open "$data_url" && echo "Opened $filename in browser."
+    xdg-open "$view_html" && echo "Opened $filename in browser."
   elif command -v wslview >/dev/null 2>&1; then
-    wslview "$data_url" && echo "Opened $filename in browser."
+    wslview "$view_html" && echo "Opened $filename in browser."
   else
-    printf '%s\n' "$data_url"
-    echo "(no browser opener found; URL printed above — paste into address bar)" >&2
+    printf 'file://%s\n' "$view_html"
+    echo "(no browser opener found; path printed above — open in your browser)" >&2
   fi
+
+  # Leave the wrapper in place so browser refresh keeps working; the OS
+  # reaps $TMPDIR on its own schedule. Intentionally not registered in
+  # TMP_PATHS so the EXIT trap doesn't touch it.
   exit 0
 fi
 
